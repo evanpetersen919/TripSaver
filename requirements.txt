@@ -1,0 +1,15 @@
+# Core Dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+pillow>=9.0.0
+numpy>=1.24.0
+
+# CV Models
+transformers>=4.30.0
+clip-by-openai>=1.0
+faiss-gpu>=1.7.2
+
+# Utilities
+rich>=13.0.0
+argparse
+pytest>=7.0.0
