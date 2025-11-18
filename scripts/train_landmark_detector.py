@@ -22,6 +22,8 @@ import json
 import time
 import mlflow
 import mlflow.pytorch
+import random
+import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -207,6 +209,7 @@ def validate(model, dataloader, criterion, device):
     
     running_loss = 0.0
     correct = 0
+    correct_top5 = 0
     total = 0
     
     with torch.no_grad():
@@ -222,6 +225,10 @@ def validate(model, dataloader, criterion, device):
             total += labels.size(0)
             correct += predicted.eq(labels).sum().item()
             
+            # Top-5 accuracy
+            _, top5_pred = outputs.topk(5, 1, True, True)
+            correct_top5 += top5_pred.eq(labels.view(-1, 1).expand_as(top5_pred)).sum().item()
+            
             pbar.set_postfix({
                 'loss': f"{running_loss / (pbar.n + 1):.4f}",
                 'acc': f"{100. * correct / total:.2f}%"
@@ -229,8 +236,9 @@ def validate(model, dataloader, criterion, device):
     
     val_loss = running_loss / len(dataloader)
     val_acc = 100. * correct / total
+    val_acc_top5 = 100. * correct_top5 / total
     
-    return val_loss, val_acc
+    return val_loss, val_acc, val_acc_top5
 
 
 # ============================================================================
@@ -239,6 +247,14 @@ def validate(model, dataloader, criterion, device):
 
 def train_model(args):
     """Main training function"""
+    
+    # Set random seeds for reproducibility
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     
     # Initialize MLflow
     mlflow.set_tracking_uri("file:./mlruns")
@@ -352,7 +368,14 @@ def train_model(args):
     print("=" * 80)
     
     # Start MLflow run
-    with mlflow.start_run():
+    run_name = f"{train_dataset.num_classes}classes_{'curated' if args.use_curated else 'top'}_b{args.batch_size}_s{args.samples_per_class or 'all'}"
+    with mlflow.start_run(run_name=run_name):
+        # Set tags for easy filtering
+        mlflow.set_tag("model_type", "landmark_detector")
+        mlflow.set_tag("architecture", "efficientnet_b3")
+        mlflow.set_tag("curated", str(args.use_curated))
+        mlflow.set_tag("balanced", str(args.samples_per_class is not None))
+        
         # Log parameters
         mlflow.log_param("num_classes", train_dataset.num_classes)
         mlflow.log_param("batch_size", args.batch_size)
@@ -364,6 +387,7 @@ def train_model(args):
         mlflow.log_param("val_samples", len(val_subset))
         mlflow.log_param("use_curated", args.use_curated)
         mlflow.log_param("early_stopping_patience", args.early_stopping)
+        mlflow.log_param("random_seed", args.seed)
     
         for epoch in range(args.epochs):
             print(f"\nEpoch {epoch + 1}/{args.epochs}")
@@ -375,7 +399,7 @@ def train_model(args):
             train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, args.device)
             
             # Validate
-            val_loss, val_acc = validate(model, val_loader, criterion, args.device)
+            val_loss, val_acc, val_acc_top5 = validate(model, val_loader, criterion, args.device)
             
             # Scheduler step
             scheduler.step(val_loss)
@@ -387,6 +411,7 @@ def train_model(args):
             mlflow.log_metric("train_acc", train_acc, step=epoch)
             mlflow.log_metric("val_loss", val_loss, step=epoch)
             mlflow.log_metric("val_acc", val_acc, step=epoch)
+            mlflow.log_metric("val_acc_top5", val_acc_top5, step=epoch)
             mlflow.log_metric("learning_rate", optimizer.param_groups[0]['lr'], step=epoch)
             mlflow.log_metric("epoch_time", epoch_time, step=epoch)
             
@@ -394,6 +419,7 @@ def train_model(args):
             print(f"\nEpoch {epoch + 1} Summary:")
             print(f"  Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}%")
             print(f"  Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.2f}%")
+            print(f"  Val Top-5 Acc: {val_acc_top5:.2f}%")
             print(f"  Time: {epoch_time:.2f}s")
             print(f"  LR: {optimizer.param_groups[0]['lr']:.6f}")
             
@@ -403,6 +429,7 @@ def train_model(args):
                 'train_loss': train_loss,
                 'train_acc': train_acc,
                 'val_loss': val_loss,
+                'val_acc_top5': val_acc_top5,
                 'val_acc': val_acc,
                 'lr': optimizer.param_groups[0]['lr'],
                 'time': epoch_time
@@ -499,6 +526,8 @@ def main():
                        help='Learning rate')
     parser.add_argument('--early-stopping', type=int, default=7,
                        help='Early stopping patience (epochs without improvement)')
+    parser.add_argument('--seed', type=int, default=42,
+                       help='Random seed for reproducibility')
     parser.add_argument('--workers', type=int, default=4,
                        help='Number of data loading workers')
     
