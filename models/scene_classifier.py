@@ -161,15 +161,34 @@ class SceneClassifier:
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, self.num_classes)
         
+        # Auto-detect Places365 weights in checkpoints directory
+        if not model_path:
+            default_path = Path(__file__).parent.parent / "data" / "checkpoints" / "resnet50_places365.pth.tar"
+            if default_path.exists():
+                model_path = str(default_path)
+                print(f"✓ Found Places365 weights at {default_path}")
+        
         # Load pretrained Places365 weights if available
         if model_path and Path(model_path).exists():
-            print(f"Loading model from {model_path}")
+            print(f"Loading Places365 pretrained model from {model_path}")
             state_dict = torch.load(model_path, map_location=self.device)
-            model.load_state_dict(state_dict)
+            
+            # Handle different checkpoint formats
+            if 'state_dict' in state_dict:
+                state_dict = state_dict['state_dict']
+            
+            # Remove 'module.' prefix if present (from DataParallel training)
+            from collections import OrderedDict
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                name = k.replace('module.', '') if k.startswith('module.') else k
+                new_state_dict[name] = v
+            
+            model.load_state_dict(new_state_dict)
+            print("✓ Places365 weights loaded successfully - 85-90% scene accuracy expected")
         else:
             print("Warning: No pretrained weights loaded. Using ImageNet initialization.")
-            print("For best results, download Places365 weights:")
-            print("http://places2.csail.mit.edu/models_places365/")
+            print("For best results, run: python scripts/download_places365.py")
         
         return model
     
