@@ -77,7 +77,7 @@ def download_metadata(data_dir: Path):
     print(f"\n✓ Metadata downloaded to {metadata_dir}\n")
 
 
-def download_images(data_dir: Path, start_idx: int = 0, end_idx: int = 499, num_parallel: int = 4):
+def download_images(data_dir: Path, start_idx: int = 0, end_idx: int = 499, num_parallel: int = 4, auto_delete: bool = False):
     """Download training images (TAR files)
     
     Args:
@@ -85,6 +85,7 @@ def download_images(data_dir: Path, start_idx: int = 0, end_idx: int = 499, num_
         start_idx: Start TAR file index (0-499)
         end_idx: End TAR file index (0-499)
         num_parallel: Number of parallel downloads
+        auto_delete: Automatically delete TARs after extraction
     """
     print("=" * 80)
     print(f"DOWNLOADING IMAGES (TAR files {start_idx} to {end_idx})")
@@ -117,9 +118,13 @@ def download_images(data_dir: Path, start_idx: int = 0, end_idx: int = 499, num_
         )
         
         # Optionally delete TAR to save space
-        if input(f"Delete {tar_name} to save space? (y/n): ").lower() == 'y':
+        if auto_delete:
             tar_path.unlink()
-            print(f"✓ Deleted {tar_name}")
+            print(f"✓ Deleted {tar_name} (auto-delete enabled)")
+        else:
+            if input(f"Delete {tar_name} to save space? (y/n): ").lower() == 'y':
+                tar_path.unlink()
+                print(f"✓ Deleted {tar_name}")
     
     print(f"\n✓ Images downloaded and extracted to {train_dir}\n")
 
@@ -196,6 +201,11 @@ def main():
         help='Number of TAR files to download (each ~1GB)'
     )
     parser.add_argument(
+        '--auto-delete',
+        action='store_true',
+        help='Automatically delete TAR files after extraction to save space'
+    )
+    parser.add_argument(
         '--prepare',
         action='store_true',
         help='Prepare dataset by filtering top landmarks'
@@ -227,7 +237,7 @@ def main():
     
     if not args.metadata_only:
         # Download images
-        download_images(data_dir, start_idx=0, end_idx=args.num_tars - 1)
+        download_images(data_dir, start_idx=0, end_idx=args.num_tars - 1, auto_delete=args.auto_delete)
     
     if args.prepare:
         # Prepare filtered dataset
