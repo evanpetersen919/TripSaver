@@ -248,6 +248,26 @@ def validate(model, dataloader, criterion, device):
 def train_model(args):
     """Main training function"""
     
+    # Load Optuna hyperparameters if specified
+    if args.load_optuna_params:
+        with open(args.load_optuna_params, 'r') as f:
+            optuna_params = json.load(f)
+        
+        # Override args with Optuna hyperparameters
+        args.lr = optuna_params.get('lr', args.lr)
+        args.batch_size = optuna_params.get('batch_size', args.batch_size)
+        args.weight_decay = optuna_params.get('weight_decay', args.weight_decay)
+        
+        print("=" * 80)
+        print("LOADED OPTUNA HYPERPARAMETERS")
+        print("=" * 80)
+        print(f"Learning rate: {args.lr:.6f}")
+        print(f"Batch size: {args.batch_size}")
+        print(f"Weight decay: {args.weight_decay:.6f}")
+        if 'augmentation_strength' in optuna_params:
+            print(f"Augmentation strength: {optuna_params['augmentation_strength']:.2f}")
+        print()
+    
     # Set random seeds for reproducibility
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -356,7 +376,7 @@ def train_model(args):
     
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.5)
     
     # Training loop
@@ -524,10 +544,14 @@ def main():
                        help='Batch size for training')
     parser.add_argument('--lr', type=float, default=0.001,
                        help='Learning rate')
+    parser.add_argument('--weight-decay', type=float, default=1e-4,
+                       help='Weight decay (L2 penalty)')
     parser.add_argument('--early-stopping', type=int, default=7,
                        help='Early stopping patience (epochs without improvement)')
     parser.add_argument('--seed', type=int, default=42,
                        help='Random seed for reproducibility')
+    parser.add_argument('--load-optuna-params', type=str, default=None,
+                       help='Path to JSON file with Optuna best hyperparameters')
     parser.add_argument('--workers', type=int, default=4,
                        help='Number of data loading workers')
     
