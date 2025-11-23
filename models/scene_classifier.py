@@ -26,7 +26,7 @@ from PIL import Image
 SCENE_CATEGORIES = [
     'airfield', 'airplane_cabin', 'airport_terminal', 'alcove', 'alley',
     'amphitheater', 'amusement_arcade', 'amusement_park', 'apartment_building_outdoor', 'aquarium',
-    'aqueduct', 'arch', 'archaelogical_excavation', 'archive', 'arena_hockey',
+    'aqueduct', 'arcade', 'arch', 'archaelogical_excavation', 'archive', 'arena_hockey',
     'arena_performance', 'arena_rodeo', 'army_base', 'art_gallery', 'art_school',
     'art_studio', 'artists_loft', 'assembly_line', 'athletic_field_outdoor', 'atrium_public',
     'attic', 'auditorium', 'auto_factory', 'auto_showroom', 'badlands',
@@ -91,7 +91,7 @@ SCENE_CATEGORIES = [
     'sushi_bar', 'swamp', 'swimming_hole', 'swimming_pool_indoor', 'swimming_pool_outdoor',
     'synagogue_outdoor', 'television_room', 'television_studio', 'temple_asia', 'throne_room',
     'ticket_booth', 'topiary_garden', 'tower', 'toyshop', 'train_interior',
-    'train_station_platform', 'tree_farm', 'tree_house', 'trench', 'tundra',
+    'train_railway', 'train_station_platform', 'tree_farm', 'tree_house', 'trench', 'tundra',
     'underwater_ocean_deep', 'utility_room', 'valley', 'vegetable_garden', 'veranda',
     'veterinarians_office', 'viaduct', 'village', 'vineyard', 'volcano',
     'volleyball_court_outdoor', 'waiting_room', 'water_park', 'water_tower', 'waterfall',

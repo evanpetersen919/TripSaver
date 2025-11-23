@@ -59,7 +59,8 @@ class LandmarkDetector:
                  model_path: Optional[str] = None,
                  device: Optional[str] = None,
                  num_classes: Optional[int] = None,
-                 landmarks: Optional[List[str]] = None):
+                 landmarks: Optional[List[str]] = None,
+                 landmark_names_path: Optional[str] = None):
         """
         Initialize landmark detector.
         
@@ -68,12 +69,23 @@ class LandmarkDetector:
             device: Device to run on ('cuda' or 'cpu')
             num_classes: Number of landmark classes
             landmarks: List of landmark names
+            landmark_names_path: Path to JSON file with landmark ID to name mapping
         """
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # Set landmarks
-        self.landmarks = landmarks if landmarks else DEFAULT_LANDMARKS
-        self.num_classes = num_classes if num_classes else len(self.landmarks)
+        # Load landmark names from JSON if provided
+        self.landmark_map = None
+        if landmark_names_path and Path(landmark_names_path).exists():
+            with open(landmark_names_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.landmark_map = {int(k): v for k, v in data['landmark_names'].items()}
+                self.num_classes = data['num_classes']
+                self.landmarks = [self.landmark_map.get(i, f'class_{i}') for i in range(self.num_classes)]
+                print(f"Loaded {self.num_classes} landmark names from {landmark_names_path}")
+        else:
+            # Set landmarks
+            self.landmarks = landmarks if landmarks else DEFAULT_LANDMARKS
+            self.num_classes = num_classes if num_classes else len(self.landmarks)
         
         # Build model
         self.model = self._build_model(model_path)

@@ -47,7 +47,8 @@ class VisionPipeline:
         enable_clip: bool = True,
         enable_landmark: bool = True,
         clip_index_path: Optional[str] = None,
-        landmark_weights_path: Optional[str] = None
+        landmark_weights_path: Optional[str] = None,
+        landmark_names_path: Optional[str] = None
     ):
         """Initialize the vision pipeline
         
@@ -58,6 +59,7 @@ class VisionPipeline:
             enable_landmark: Enable landmark detection
             clip_index_path: Path to FAISS index for CLIP
             landmark_weights_path: Path to trained landmark weights
+            landmark_names_path: Path to JSON file with landmark names
         """
         self.device = device or config.device.get_device()
         
@@ -87,7 +89,8 @@ class VisionPipeline:
         if enable_landmark:
             print("Loading Landmark Detector...")
             self.landmark_detector = LandmarkDetector(
-                model_path=landmark_weights_path if landmark_weights_path else None
+                model_path=landmark_weights_path if landmark_weights_path else None,
+                landmark_names_path=landmark_names_path if landmark_names_path else None
             )
             print(f"✓ Landmark Detector ready ({self.landmark_detector.num_classes} landmarks)")
         
