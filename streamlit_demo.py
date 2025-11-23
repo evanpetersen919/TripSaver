@@ -21,29 +21,36 @@ import time
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.vision_pipeline import VisionPipeline
+from core.recommendation_engine import RecommendationEngine
 
 
-@st.cache_resource
+@st.cache_resource(ttl=None, show_spinner="Loading vision models...")
 def load_pipeline():
     """Load the vision pipeline with all models (cached)"""
-    model_path = "data/checkpoints/landmark_detector_100classes_best.pth"
-    landmark_names_path = "data/checkpoints/landmark_names_100classes.json"
+    base_path = Path(__file__).parent
+    model_path = str(base_path / "data" / "checkpoints" / "landmark_detector_100classes_best.pth")
+    landmark_names_path = str(base_path / "data" / "checkpoints" / "landmark_names_100classes.json")
     
     # Force reload by clearing any cached models
     pipeline = VisionPipeline(
-        enable_scene=True,
-        enable_clip=False,  # Enable when FAISS index is available
+        enable_llava=True,
+        enable_clip=True,  # Now works without FAISS index
         enable_landmark=True,
         landmark_weights_path=model_path,
         landmark_names_path=landmark_names_path
     )
     
-    # Verify scene classifier loaded correctly
-    if pipeline.scene_classifier:
-        assert len(pipeline.scene_classifier.categories) == 365, "Scene categories mismatch!"
-        print(f"✓ Scene classifier verified: {len(pipeline.scene_classifier.categories)} categories")
+    # Verify models loaded correctly
+    if pipeline.llava_analyzer:
+        print(f"✓ LLaVA analyzer verified")
     
     return pipeline
+
+
+@st.cache_resource
+def load_recommendation_engine():
+    """Load recommendation engine (cached)"""
+    return RecommendationEngine()
 
 
 def create_confidence_chart(predictions, title="Top-5 Predictions"):
@@ -86,8 +93,8 @@ def main():
     st.markdown("""
     Upload an image to analyze it with **multiple AI models in parallel**:
     - 🏛️ **Landmark Detector** - Identifies 100 landmarks (91.45% accuracy)
-    - 🌄 **Scene Classifier** - Recognizes 365 scene types (beach, mountain, city, etc.)
-    - 🔍 **CLIP Embedder** - Visual similarity search (coming soon)
+    - 🤖 **LLaVA AI** - Advanced vision-language analysis and location reasoning
+    - 🔍 **CLIP Embedder** - Visual similarity search for finding similar-looking places
     """)
     
     # Sidebar
@@ -103,12 +110,12 @@ def main():
         **Training:** Optuna-optimized
         """)
         
-        st.markdown("### 🌄 Scene Classifier")
+        st.markdown("### 🤖 LLaVA Vision AI")
         st.markdown("""
-        **Architecture:** ResNet-18  
-        **Classes:** 365 scenes  
-        **Dataset:** Places365  
-        **Examples:** beach, forest, kitchen, office
+        **Model:** LLaVA-1.5-7B  
+        **Type:** Vision-Language Model  
+        **Capability:** Natural language scene understanding  
+        **Features:** Location analysis, descriptions, Q&A
         """)
         
         st.markdown("---")
@@ -156,13 +163,13 @@ def main():
             with col_a:
                 st.metric("Total Inference Time", f"{inference_time:.0f}ms")
             with col_b:
-                models_used = sum([1 for k in ['scene_classifier', 'landmark_detector', 'clip_embedder'] if results.get(k)])
+                models_used = sum([1 for k in ['llava_analyzer', 'landmark_detector', 'clip_embedder'] if results.get(k)])
                 st.metric("Models Used", f"{models_used}/3")
             
             st.markdown("---")
             
             # Tabs for different models
-            tab1, tab2, tab3 = st.tabs(["🏛️ Landmark", "🌄 Scene", "📊 Summary"])
+            tab1, tab2, tab3 = st.tabs(["🏛️ Landmark", "🤖 LLaVA Analysis", "📊 Summary"])
             
             with tab1:
                 if results.get('landmark_detector'):
@@ -188,29 +195,60 @@ def main():
                     st.warning("Landmark detector not available")
             
             with tab2:
-                if results.get('scene_classifier'):
-                    scene = results['scene_classifier']
-                    st.success(f"**Scene Type:** {scene['top_scene']}")
-                    st.metric("Confidence", f"{scene['confidence']:.2%}",
-                             help=f"Model took {scene['elapsed_ms']:.1f}ms")
+                if results.get('llava_analyzer'):
+                    llava = results['llava_analyzer']
+                    st.success("**AI Analysis Complete**")
+                    st.metric("Inference Time", f"{llava['elapsed_ms']:.0f}ms")
                     
-                    st.markdown("#### Top-5 Scene Categories")
-                    for i, pred in enumerate(scene['predictions'], 1):
-                        cols = st.columns([0.5, 3, 2])
-                        with cols[0]:
-                            st.markdown(f"**#{i}**")
-                        with cols[1]:
-                            st.markdown(f"`{pred['category']}`")
-                        with cols[2]:
-                            st.progress(pred['confidence'])
-                            st.caption(f"{pred['confidence']:.2%}")
+                    st.markdown("#### 📝 Location Analysis")
+                    st.info(llava['description'])
                     
-                    fig = create_confidence_chart(scene['predictions'], "Scene Classifications")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown("#### 🔍 Analysis Type")
+                    st.caption(f"Type: {llava['type']}")
+                    
+                    # Show word cloud or key phrases
+                    if llava['description']:
+                        st.markdown("#### 🏷️ Key Information")
+                        # Simple keyword extraction
+                        words = llava['description'].split()
+                        if len(words) > 20:
+                            st.caption(f"Analysis contains {len(words)} words of detailed description")
                 else:
-                    st.warning("Scene classifier not available")
+                    st.warning("LLaVA analyzer not available")
             
             with tab3:
+                # CLIP Embedder Results
+                if results.get('clip_embedder'):
+                    clip = results['clip_embedder']
+                    st.success("**CLIP Visual Embedding Generated**")
+                    st.metric("Inference Time", f"{clip['elapsed_ms']:.0f}ms")
+                    
+                    st.markdown("#### 🎨 Visual Embedding")
+                    st.info(f"Generated {clip['embedding_dim']}-dimensional visual embedding for similarity search")
+                    
+                    st.markdown("#### 💡 What is CLIP?")
+                    st.caption("""
+                    CLIP (Contrastive Language-Image Pre-Training) encodes images into a vector space 
+                    where visually similar images are close together. This enables finding landmarks that 
+                    *look* similar, complementing text-based search.
+                    """)
+                    
+                    # Show embedding stats
+                    if clip.get('embedding') is not None:
+                        import numpy as np
+                        emb = clip['embedding']
+                        st.markdown("#### 📊 Embedding Statistics")
+                        cols = st.columns(3)
+                        with cols[0]:
+                            st.metric("Mean", f"{np.mean(emb):.4f}")
+                        with cols[1]:
+                            st.metric("Std Dev", f"{np.std(emb):.4f}")
+                        with cols[2]:
+                            st.metric("L2 Norm", f"{np.linalg.norm(emb):.4f}")
+                else:
+                    st.info("CLIP visual embeddings are being used in recommendations")
+                
+                st.markdown("---")
                 st.markdown("### Aggregated Prediction")
                 aggregated = pipeline.aggregate_predictions(results)
                 
@@ -238,6 +276,80 @@ def main():
                     import pandas as pd
                     df = pd.DataFrame(timing_data)
                     st.dataframe(df, use_container_width=True, hide_index=True)
+            
+            # Itinerary Recommendations Section
+            if results.get('llava_analyzer'):
+                st.markdown("---")
+                st.markdown("### 🗺️ Find Similar Places Near Your Itinerary")
+                st.markdown("Get personalized recommendations based on this image's features")
+                
+                # Itinerary input
+                rec_engine = load_recommendation_engine()
+                available_landmarks = rec_engine.get_available_landmarks()
+                
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    selected_landmarks = st.multiselect(
+                        "Select landmarks in your itinerary:",
+                        options=available_landmarks,
+                        default=[],
+                        help="Choose landmarks you're planning to visit"
+                    )
+                
+                with col2:
+                    max_distance = st.number_input(
+                        "Max distance (km):",
+                        min_value=5,
+                        max_value=200,
+                        value=50,
+                        step=5
+                    )
+                
+                if st.button("🔍 Get Recommendations", type="primary") and selected_landmarks:
+                    with st.spinner("Finding similar places near your itinerary..."):
+                        try:
+                            llava_desc = results['llava_analyzer']['description']
+                            
+                            # Get CLIP embedding if available
+                            clip_embedding = None
+                            if 'clip_embedder' in results and results['clip_embedder']:
+                                clip_embedding = results['clip_embedder'].get('embedding')
+                            
+                            recommendations = rec_engine.recommend(
+                                itinerary_landmarks=selected_landmarks,
+                                llava_description=llava_desc,
+                                max_distance_km=max_distance,
+                                clip_embedding=clip_embedding,
+                                top_k=5
+                            )
+                            
+                            if recommendations:
+                                st.success(f"Found {len(recommendations)} recommendations!")
+                                
+                                for i, rec in enumerate(recommendations, 1):
+                                    with st.expander(f"#{i} {rec.name} — Score: {rec.final_score:.2f}", expanded=i<=3):
+                                        cols = st.columns([2, 1])
+                                        
+                                        with cols[0]:
+                                            st.markdown(f"**📍 Location:** {rec.country}")
+                                            st.markdown(f"**📏 Distance:** {rec.distance_km:.1f}km from {rec.closest_itinerary_item}")
+                                            st.markdown(f"**🎯 Similarity:** {rec.similarity_score:.0%} match")
+                                            if rec.description:
+                                                st.caption(f"💬 {rec.description}")
+                                        
+                                        with cols[1]:
+                                            st.metric("Final Score", f"{rec.final_score:.2f}")
+                                            st.metric("Coordinates", f"{rec.latitude:.4f}, {rec.longitude:.4f}")
+                                
+                            else:
+                                st.warning(f"No landmarks found within {max_distance}km of your itinerary")
+                        
+                        except Exception as e:
+                            st.error(f"Error generating recommendations: {str(e)}")
+                
+                elif not selected_landmarks:
+                    st.info("💡 Select landmarks from your itinerary to get personalized recommendations")
         
         else:
             st.info("👆 Upload an image to get started")
@@ -248,27 +360,29 @@ def main():
             
             **🏛️ Landmark Detector**
             - Identifies 100 landmarks from Google Landmarks Dataset
-            - Examples: Sant Julià de Pedra, The Beresford, Gulf State Park
-            - Best for: architectural landmarks, monuments, parks
+            - Examples: Eiffel Tower, Golden Gate Bridge, Grand Canyon
+            - Best for: specific architectural landmarks and monuments
             
-            **🌄 Scene Classifier**  
-            - Recognizes 365 different scene types
-            - Examples: beach, forest, kitchen, stadium, church
-            - Best for: general location context
+            **🤖 LLaVA Vision AI**  
+            - Advanced vision-language model with location reasoning
+            - Provides natural language descriptions and analysis
+            - Can identify landmarks and suggest likely locations
+            - Best for: contextual understanding and unknown locations
             
-            **🔍 CLIP Embedder** (Coming Soon)
-            - Finds visually similar images in a database
-            - Best for: niche locations not in training data
+            **🔍 CLIP Embedder**
+            - Generates visual embeddings for similarity search
+            - Finds landmarks that *look* similar (architecture, scenery, vibe)
+            - Best for: visual matching beyond text descriptions
             
             The pipeline runs all models **in parallel** and combines their predictions
-            for the most accurate location detection possible.
+            for comprehensive location analysis and recommendations.
             """)
     
     # Footer
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center'>
-        <p>Built with Streamlit • Powered by EfficientNet-B3 + ResNet-18 + CLIP</p>
+        <p>Built with Streamlit • Powered by EfficientNet-B3 + LLaVA-1.5-7B + OpenCLIP ViT-B/32</p>
     </div>
     """, unsafe_allow_html=True)
 

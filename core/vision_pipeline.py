@@ -18,7 +18,7 @@ import torch
 from concurrent.futures import ThreadPoolExecutor
 import warnings
 
-from models.scene_classifier import SceneClassifier
+from models.llava_analyzer import LLaVAAnalyzer
 from models.clip_embedder import ClipEmbedder
 from models.landmark_detector import LandmarkDetector
 from core.config import config
@@ -33,7 +33,7 @@ class VisionPipeline:
     Orchestrates parallel execution of multiple CV models.
     
     Combines predictions from:
-    - Scene Classifier (365 scene categories)
+    - LLaVA Vision-Language Model (natural language scene understanding)
     - CLIP Embedder (visual similarity search)
     - Landmark Detector (famous landmarks)
     
@@ -43,8 +43,8 @@ class VisionPipeline:
     def __init__(
         self,
         device: Optional[str] = None,
-        enable_scene: bool = True,
-        enable_clip: bool = True,
+        enable_llava: bool = True,
+        enable_clip: bool = False,
         enable_landmark: bool = True,
         clip_index_path: Optional[str] = None,
         landmark_weights_path: Optional[str] = None,
@@ -54,7 +54,7 @@ class VisionPipeline:
         
         Args:
             device: Device to run models on ('cuda' or 'cpu')
-            enable_scene: Enable scene classification
+            enable_llava: Enable LLaVA vision-language analysis
             enable_clip: Enable CLIP similarity search
             enable_landmark: Enable landmark detection
             clip_index_path: Path to FAISS index for CLIP
@@ -68,14 +68,14 @@ class VisionPipeline:
         print("=" * 80)
         
         # Initialize models
-        self.scene_classifier = None
+        self.llava_analyzer = None
         self.clip_embedder = None
         self.landmark_detector = None
         
-        if enable_scene:
-            print("Loading Scene Classifier...")
-            self.scene_classifier = SceneClassifier(device=str(self.device))
-            print(f"✓ Scene Classifier ready ({self.scene_classifier.num_classes} categories)")
+        if enable_llava:
+            print("Loading LLaVA Vision-Language Model...")
+            self.llava_analyzer = LLaVAAnalyzer(device=str(self.device))
+            print(f"✓ LLaVA Analyzer ready")
         
         if enable_clip:
             print("Loading CLIP Embedder...")
@@ -104,27 +104,26 @@ class VisionPipeline:
     # PARALLEL EXECUTION
     # ========================================================================
     
-    async def _run_scene_classifier(self, image: Image.Image) -> Dict[str, Any]:
-        """Run scene classifier asynchronously"""
-        if not self.scene_classifier:
+    async def _run_llava_analyzer(self, image: Image.Image) -> Dict[str, Any]:
+        """Run LLaVA analyzer asynchronously"""
+        if not self.llava_analyzer:
             return None
         
         start = time.time()
-        predictions = self.scene_classifier.predict(image, top_k=5)
+        result = self.llava_analyzer.predict(image)
         elapsed = (time.time() - start) * 1000
         
         return {
-            'model': 'scene_classifier',
-            'predictions': predictions,
-            'top_scene': predictions[0]['category'],
-            'confidence': predictions[0]['confidence'],
+            'model': 'llava_analyzer',
+            'description': result['description'],
+            'type': result['type'],
             'elapsed_ms': elapsed
         }
     
     
     async def _run_clip_embedder(self, image: Image.Image, top_k: int = 10) -> Dict[str, Any]:
-        """Run CLIP similarity search asynchronously"""
-        if not self.clip_embedder or self.clip_embedder.index is None:
+        """Run CLIP embedder asynchronously"""
+        if not self.clip_embedder:
             return None
         
         start = time.time()
@@ -132,18 +131,27 @@ class VisionPipeline:
         # Encode image
         embedding = self.clip_embedder.encode_image(image)
         
-        # Search index
-        results = self.clip_embedder.search(embedding, top_k=top_k)
-        
         elapsed = (time.time() - start) * 1000
         
-        return {
-            'model': 'clip_embedder',
-            'results': results,
-            'top_match': results[0] if results else None,
-            'similarity': results[0]['similarity'] if results else 0.0,
-            'elapsed_ms': elapsed
-        }
+        # If index exists, do similarity search
+        if hasattr(self.clip_embedder, 'index') and self.clip_embedder.index is not None:
+            results = self.clip_embedder.search(embedding, top_k=top_k)
+            return {
+                'model': 'clip_embedder',
+                'embedding': embedding,
+                'results': results,
+                'top_match': results[0] if results else None,
+                'similarity': results[0]['similarity'] if results else 0.0,
+                'elapsed_ms': elapsed
+            }
+        else:
+            # No index - just return embedding for recommendation engine
+            return {
+                'model': 'clip_embedder',
+                'embedding': embedding,
+                'embedding_dim': len(embedding),
+                'elapsed_ms': elapsed
+            }
     
     
     async def _run_landmark_detector(self, image: Image.Image) -> Dict[str, Any]:
@@ -183,8 +191,8 @@ class VisionPipeline:
         # Run all models in parallel
         tasks = []
         
-        if self.scene_classifier:
-            tasks.append(self._run_scene_classifier(image))
+        if self.llava_analyzer:
+            tasks.append(self._run_llava_analyzer(image))
         
         if self.clip_embedder:
             tasks.append(self._run_clip_embedder(image, clip_top_k))
@@ -199,7 +207,7 @@ class VisionPipeline:
         
         # Organize results
         output = {
-            'scene_classifier': None,
+            'llava_analyzer': None,
             'clip_embedder': None,
             'landmark_detector': None,
             'total_time_ms': total_time,
@@ -316,9 +324,9 @@ class VisionPipeline:
                 })
         
         # Check CLIP similarity (for niche locations)
-        if results.get('clip_embedder') and results['clip_embedder']['top_match']:
+        if results.get('clip_embedder') and results['clip_embedder'].get('top_match'):
             clip_result = results['clip_embedder']
-            if clip_result['similarity'] > config.clip.similarity_threshold:
+            if clip_result.get('similarity', 0) > config.clip.similarity_threshold:
                 if aggregated['location_type'] == 'unknown':
                     aggregated['location_type'] = 'similar_location'
                     aggregated['location_name'] = clip_result['top_match'].get('location', 'unknown')
@@ -330,19 +338,21 @@ class VisionPipeline:
                     'confidence': clip_result['similarity']
                 })
         
-        # Use scene classification (most general)
-        if results.get('scene_classifier'):
-            scene = results['scene_classifier']
-            if scene['confidence'] > config.scene_classifier.confidence_threshold:
+        # Use LLaVA description (most general, provides context)
+        if results.get('llava_analyzer'):
+            llava = results['llava_analyzer']
+            # Extract potential location hints from description
+            description = llava['description']
+            if description and len(description) > 10:
                 if aggregated['location_type'] == 'unknown':
-                    aggregated['location_type'] = 'scene'
-                    aggregated['location_name'] = scene['top_scene']
-                    aggregated['confidence'] = scene['confidence']
+                    aggregated['location_type'] = 'scene_analysis'
+                    aggregated['location_name'] = description[:100]  # First 100 chars
+                    aggregated['confidence'] = 0.5  # Lower confidence for description
                 
                 aggregated['evidence'].append({
-                    'source': 'scene_classifier',
-                    'value': scene['top_scene'],
-                    'confidence': scene['confidence']
+                    'source': 'llava_analyzer',
+                    'value': description,
+                    'confidence': 0.5
                 })
         
         return aggregated

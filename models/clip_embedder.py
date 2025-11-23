@@ -18,13 +18,13 @@ import pickle
 import json
 
 
-# Try to import CLIP
+# Try to import OpenCLIP (newer, better maintained)
 try:
-    import clip
+    import open_clip
     CLIP_AVAILABLE = True
 except ImportError:
     CLIP_AVAILABLE = False
-    print("Warning: CLIP not installed. Install with: pip install git+https://github.com/openai/CLIP.git")
+    print("Warning: OpenCLIP not installed. Install with: pip install open-clip-torch")
 
 # Try to import FAISS
 try:
@@ -75,9 +75,13 @@ class ClipEmbedder:
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_name = model_name
         
-        # Load CLIP model
+        # Load CLIP model with OpenCLIP
         print(f"Loading CLIP model: {model_name}")
-        self.model, self.preprocess = clip.load(model_name, device=self.device)
+        self.model, _, self.preprocess = open_clip.create_model_and_transforms(
+            model_name,
+            pretrained='openai',
+            device=self.device
+        )
         self.model.eval()
         
         # Get embedding dimension
@@ -163,7 +167,7 @@ class ClipEmbedder:
             text = [text]
         
         # Tokenize text
-        text_tokens = clip.tokenize(text).to(self.device)
+        text_tokens = open_clip.tokenize([text]).to(self.device)
         
         # Generate embeddings
         with torch.no_grad():
