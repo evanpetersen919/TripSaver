@@ -168,17 +168,46 @@ def main():
             
             st.markdown("---")
             
-            # Tabs for different models
-            tab1, tab2, tab3 = st.tabs(["🏛️ Landmark", "🤖 LLaVA Analysis", "📊 Summary"])
+            # Get smart recommendation strategy
+            strategy = pipeline.get_recommendation_strategy(results)
+            
+            # Show user-friendly result based on strategy
+            if strategy['mode'] == 'landmark':
+                st.success(f"### ✅ {strategy['user_message']}")
+                st.metric("Confidence", f"{strategy['confidence']:.1%}")
+                
+            elif strategy['mode'] == 'landmark_options':
+                st.warning(f"### 🤔 {strategy['user_message']}")
+                st.markdown("**Top 3 possibilities:**")
+                for i, (option, conf) in enumerate(zip(strategy['options'], strategy['confidences']), 1):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.markdown(f"{i}. **{option}**")
+                    with col2:
+                        st.caption(f"{conf:.1%}")
+                        
+            elif strategy['mode'] == 'scene':
+                st.info(f"### 🔍 {strategy['user_message']}")
+                
+            else:  # exploration mode
+                st.info(f"### 🌍 {strategy['user_message']}")
+            
+            st.markdown("---")
+            
+            # Tabs for detailed results
+            tab1, tab2, tab3 = st.tabs(["🏛️ Landmark Details", "🤖 LLaVA Analysis", "📊 All Predictions"])
             
             with tab1:
                 if results.get('landmark_detector'):
                     landmark = results['landmark_detector']
-                    st.success(f"**Detected:** {landmark['top_landmark']}")
-                    st.metric("Confidence", f"{landmark['confidence']:.2%}", 
-                             help=f"Model took {landmark['elapsed_ms']:.1f}ms")
                     
-                    st.markdown("#### Top-5 Predictions")
+                    # Show confidence level
+                    level = landmark.get('confidence_level', 'unknown')
+                    level_emoji = {'high': '🟢', 'medium': '🟡', 'low': '🔴'}.get(level, '⚪')
+                    st.markdown(f"**Confidence Level:** {level_emoji} {level.upper()}")
+                    st.caption(f"Took {landmark['elapsed_ms']:.1f}ms")
+                    
+                    st.markdown("#### All Predictions")
                     for i, pred in enumerate(landmark['predictions'], 1):
                         cols = st.columns([0.5, 3, 2])
                         with cols[0]:

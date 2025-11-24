@@ -163,11 +163,27 @@ class VisionPipeline:
         predictions = self.landmark_detector.predict(image, top_k=5)
         elapsed = (time.time() - start) * 1000
         
+        # Confidence-based quality assessment
+        top_confidence = predictions[0]['confidence']
+        
+        # Determine confidence level
+        if top_confidence >= 0.7:
+            confidence_level = 'high'
+            reliable = True
+        elif top_confidence >= 0.4:
+            confidence_level = 'medium'
+            reliable = True
+        else:
+            confidence_level = 'low'
+            reliable = False
+        
         return {
             'model': 'landmark_detector',
             'predictions': predictions,
             'top_landmark': predictions[0]['landmark'],
-            'confidence': predictions[0]['confidence'],
+            'confidence': top_confidence,
+            'confidence_level': confidence_level,
+            'reliable': reliable,
             'elapsed_ms': elapsed
         }
     
@@ -356,6 +372,77 @@ class VisionPipeline:
                 })
         
         return aggregated
+    
+    
+    def get_recommendation_strategy(self, results: Dict[str, Any]) -> Dict[str, Any]:
+        """Determine the best recommendation strategy based on model confidence
+        
+        Args:
+            results: Output from predict() or predict_async()
+            
+        Returns:
+            Strategy dict with:
+            - mode: 'landmark', 'scene', or 'exploration'
+            - confidence: overall confidence score
+            - primary_model: which model to trust most
+            - fallback: what to do if user rejects
+            - user_message: what to tell the user
+        """
+        landmark_result = results.get('landmark_detector')
+        llava_result = results.get('llava_analyzer')
+        clip_result = results.get('clip_embedder')
+        
+        # High confidence landmark detection
+        if landmark_result and landmark_result.get('reliable') and landmark_result['confidence'] >= 0.7:
+            return {
+                'mode': 'landmark',
+                'confidence': landmark_result['confidence'],
+                'primary_model': 'landmark_detector',
+                'landmark_id': landmark_result['top_landmark'],
+                'alternatives': [p['landmark'] for p in landmark_result['predictions'][1:4]],
+                'user_message': f"I'm confident this is **{landmark_result['top_landmark']}**",
+                'show_alternatives': False,
+                'fallback': 'show_alternatives'
+            }
+        
+        # Medium confidence - show options
+        elif landmark_result and landmark_result.get('confidence', 0) >= 0.4:
+            top_3 = landmark_result['predictions'][:3]
+            return {
+                'mode': 'landmark_options',
+                'confidence': landmark_result['confidence'],
+                'primary_model': 'landmark_detector',
+                'options': [p['landmark'] for p in top_3],
+                'confidences': [p['confidence'] for p in top_3],
+                'user_message': f"This looks like one of these landmarks. Which one is it?",
+                'show_alternatives': True,
+                'fallback': 'scene_based'
+            }
+        
+        # Low confidence or no landmark - use scene understanding
+        elif llava_result:
+            description = llava_result.get('description', '')
+            return {
+                'mode': 'scene',
+                'confidence': 0.5,
+                'primary_model': 'llava_analyzer',
+                'scene_description': description,
+                'clip_embedding': clip_result.get('embedding') if clip_result else None,
+                'user_message': f"I see: **{description[:100]}...**\n\nLet me find similar places for you!",
+                'show_alternatives': False,
+                'fallback': 'manual_search'
+            }
+        
+        # Last resort - exploration mode
+        else:
+            return {
+                'mode': 'exploration',
+                'confidence': 0.0,
+                'primary_model': None,
+                'user_message': "I can't identify a specific landmark, but I can help you explore! Where would you like to travel?",
+                'show_alternatives': False,
+                'fallback': 'manual_search'
+            }
     
     
     # ========================================================================
