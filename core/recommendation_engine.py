@@ -41,7 +41,7 @@ class RecommendationEngine:
             landmarks_path: Path to enriched landmarks JSON
         """
         if landmarks_path is None:
-            landmarks_path = Path(__file__).parent.parent / 'data' / 'landmarks_enriched.json'
+            landmarks_path = Path(__file__).parent.parent / 'data' / 'landmarks_unified.json'
         
         # Load landmarks database
         with open(landmarks_path, 'r', encoding='utf-8') as f:
@@ -56,15 +56,18 @@ class RecommendationEngine:
         # Build spatial index for fast proximity search
         print("Building spatial index...")
         self._build_spatial_index()
-        print(f"✓ Spatial index ready ({len(self.landmarks)} locations)")
+        print(f"[OK] Spatial index ready ({len(self.landmarks)} locations)")
         
         # Load sentence transformer for feature embeddings
         print("Loading sentence transformer model...")
         self.embedder = SentenceTransformer('all-MiniLM-L6-v2')  # 384-dim, fast
-        print("✓ Sentence transformer ready")
+        print("[OK] Sentence transformer ready")
         
         # Pre-compute embeddings for all landmarks (optional, speeds up queries)
         self._precompute_embeddings()
+        
+        # Load CLIP visual embeddings if available
+        self._load_clip_embeddings()
     
     def _build_spatial_index(self):
         """Build KD-Tree for fast spatial queries."""
@@ -98,7 +101,33 @@ class RecommendationEngine:
             batch_size=32
         )
         
-        print(f"✓ Pre-computed {len(self.landmark_embeddings)} embeddings")
+        print(f"[OK] Pre-computed {len(self.landmark_embeddings)} embeddings")
+    
+    def _load_clip_embeddings(self):
+        """Load pre-computed CLIP visual embeddings."""
+        embeddings_path = Path(__file__).parent.parent / 'data' / 'landmarks_clip_embeddings.npy'
+        mapping_path = Path(__file__).parent.parent / 'data' / 'landmarks_id_mapping.json'
+        
+        if not embeddings_path.exists() or not mapping_path.exists():
+            print("[INFO] No CLIP visual embeddings found (visual similarity disabled)")
+            self.clip_embeddings = None
+            self.clip_id_to_idx = {}
+            return
+        
+        print("Loading CLIP visual embeddings...")
+        
+        # Load embeddings array
+        self.clip_embeddings = np.load(embeddings_path)
+        
+        # Load landmark ID mapping
+        with open(mapping_path, 'r') as f:
+            mapping_data = json.load(f)
+            landmark_ids = mapping_data['landmark_ids']
+        
+        # Create lookup dict: landmark_id -> embedding index
+        self.clip_id_to_idx = {lid: idx for idx, lid in enumerate(landmark_ids)}
+        
+        print(f"[OK] Loaded {len(self.clip_embeddings)} CLIP embeddings")
     
     def haversine_distance(
         self, 
@@ -350,11 +379,18 @@ class RecommendationEngine:
             
             # 2. Visual similarity score (if CLIP embedding provided)
             visual_similarity = 0.0
-            if clip_embedding is not None:
-                # For now, we don't have landmark CLIP embeddings pre-computed
-                # This will be populated when we add visual database
-                # TODO: Add visual similarity when landmark images are indexed
-                visual_similarity = 0.0
+            if clip_embedding is not None and self.clip_embeddings is not None:
+                # Get landmark's CLIP embedding if available
+                landmark_id = landmark.get('landmark_id')
+                if landmark_id in self.clip_id_to_idx:
+                    emb_idx = self.clip_id_to_idx[landmark_id]
+                    landmark_clip = self.clip_embeddings[emb_idx]
+                    # Check if not a zero vector (means no images for this landmark)
+                    if np.linalg.norm(landmark_clip) > 0:
+                        visual_similarity = self.compute_visual_similarity(
+                            clip_embedding, 
+                            landmark_clip
+                        )
             
             # 3. Proximity score (closer = better)
             proximity = 1 - (landmark['distance_to_closest'] / max_distance_km)
@@ -364,15 +400,29 @@ class RecommendationEngine:
             image_count = landmark.get('image_count', 0)
             popularity = min(image_count / 1000, 1.0)  # Normalize
             
-            # Combined score (if no CLIP, redistribute weights)
-            if clip_embedding is None:
-                # No visual similarity - boost text similarity
-                final_score = (
-                    text_similarity * (similarity_weight + visual_weight) +
-                    proximity * proximity_weight +
-                    popularity * popularity_weight
-                )
+            # Combined score with dynamic weight normalization
+            # Redistribute visual_weight if either user has no image OR landmark has no visual data
+            has_user_image = clip_embedding is not None
+            has_landmark_visual = visual_similarity > 0  # Will be 0 if no CLIP embedding for landmark
+            
+            if not has_user_image or not has_landmark_visual:
+                # No visual comparison possible - redistribute visual_weight proportionally
+                total_other_weights = similarity_weight + proximity_weight + popularity_weight
+                if total_other_weights > 0:
+                    # Redistribute visual_weight proportionally to other factors
+                    text_boost = visual_weight * (similarity_weight / total_other_weights)
+                    proximity_boost = visual_weight * (proximity_weight / total_other_weights)
+                    popularity_boost = visual_weight * (popularity_weight / total_other_weights)
+                    
+                    final_score = (
+                        text_similarity * (similarity_weight + text_boost) +
+                        proximity * (proximity_weight + proximity_boost) +
+                        popularity * (popularity_weight + popularity_boost)
+                    )
+                else:
+                    final_score = text_similarity
             else:
+                # Full scoring with all factors
                 final_score = (
                     text_similarity * similarity_weight +
                     visual_similarity * visual_weight +

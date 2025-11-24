@@ -69,8 +69,9 @@ class ClipEmbedder:
         if not CLIP_AVAILABLE:
             raise ImportError("CLIP is required. Install with: pip install git+https://github.com/openai/CLIP.git")
         
-        if not FAISS_AVAILABLE:
-            raise ImportError("FAISS is required. Install with: pip install faiss-gpu")
+        # FAISS is optional - only needed for similarity search
+        if not FAISS_AVAILABLE and index_path is not None:
+            raise ImportError("FAISS is required for index loading. Install with: pip install faiss-gpu")
         
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_name = model_name

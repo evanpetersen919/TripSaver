@@ -17,6 +17,11 @@ data/test_data/*
 !data/test_data/.gitkeep
 data/google_landmarks/train/
 data/google_landmarks/metadata/*.csv
+data/landmarks_clip_embeddings.npy
+data/landmarks_id_mapping.json
+data/landmarks_unified.json
+data/landmarks_expanded_full.json
+data/categories_places365.txt
 
 # Models
 *.pth
