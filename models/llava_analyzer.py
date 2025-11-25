@@ -52,6 +52,10 @@ class LLaVAAnalyzer:
         self.model_name = model_name
         
         print(f"Loading LLaVA model: {model_name}")
+        print(f"Target device: {self.device} (CUDA available: {torch.cuda.is_available()})")
+        print(f"PyTorch version: {torch.__version__}, CUDA build: {torch.version.cuda}")
+        import sys
+        print(f"Python: {sys.executable}")
         print("This may take a few minutes on first run (downloading ~13GB model)...")
         
         # Load processor
@@ -88,7 +92,18 @@ class LLaVAAnalyzer:
             print("✓ Model loaded")
         
         self.model.eval()
+        
+        # Check actual device after loading
+        if hasattr(self.model, 'device'):
+            actual_device = self.model.device
+        elif hasattr(self.model, 'hf_device_map'):
+            actual_device = f"distributed: {self.model.hf_device_map}"
+        else:
+            # Get device of first parameter
+            actual_device = next(self.model.parameters()).device
+        
         print(f"LLaVAAnalyzer initialized on {self.device}")
+        print(f"Actual model device: {actual_device}")
     
     
     def analyze_location(self, image: Image.Image) -> Dict[str, Any]:

@@ -170,8 +170,11 @@ class RecommendationEngine:
             itinerary_landmarks: List of landmark names in itinerary
             
         Returns:
-            (latitude, longitude) of center point
+            (latitude, longitude) of center point, or (0, 0) for global search
         """
+        if not itinerary_landmarks:
+            return 0.0, 0.0  # Global search mode
+            
         coords = []
         
         for name in itinerary_landmarks:
@@ -198,18 +201,32 @@ class RecommendationEngine:
     def find_nearby_landmarks(
         self,
         itinerary_landmarks: List[str],
-        max_distance_km: float = 50.0
+        max_distance_km: Optional[float] = 50.0
     ) -> List[Dict[str, Any]]:
         """
         Find landmarks within radius of itinerary center using spatial index.
+        If no itinerary provided, returns all landmarks (global search).
         
         Args:
-            itinerary_landmarks: List of landmark names
-            max_distance_km: Maximum distance from center
+            itinerary_landmarks: List of landmark names (empty for global search)
+            max_distance_km: Maximum distance from center (None for global search)
             
         Returns:
             List of nearby landmarks with distances
         """
+        # Global search mode: no itinerary, return all landmarks
+        if not itinerary_landmarks or max_distance_km is None:
+            return [
+                {
+                    **landmark, 
+                    'distance_km': 0.0,
+                    'distance_to_closest': 0.0,
+                    'closest_itinerary_item': 'Global Search',
+                    '_index': idx
+                }
+                for idx, landmark in enumerate(self.landmarks)
+            ]
+        
         center_lat, center_lon = self.get_itinerary_center(itinerary_landmarks)
         
         # Use spatial index for fast proximity search
@@ -333,7 +350,7 @@ class RecommendationEngine:
         self,
         itinerary_landmarks: List[str],
         llava_description: str,
-        max_distance_km: float = 50.0,
+        max_distance_km: Optional[float] = 50.0,
         top_k: int = 5,
         clip_embedding: Optional[np.ndarray] = None,
         similarity_weight: float = 0.5,
@@ -345,9 +362,9 @@ class RecommendationEngine:
         Generate top-K recommendations based on distance, text similarity, and visual similarity.
         
         Args:
-            itinerary_landmarks: List of landmark names in user's itinerary
+            itinerary_landmarks: List of landmark names in user's itinerary (empty for global)
             llava_description: Feature description from LLaVA
-            max_distance_km: Maximum distance from itinerary center
+            max_distance_km: Maximum distance from itinerary center (None for global search)
             top_k: Number of recommendations to return
             clip_embedding: Optional CLIP visual embedding for visual similarity
             similarity_weight: Weight for text similarity (0-1)
@@ -393,36 +410,55 @@ class RecommendationEngine:
                         )
             
             # 3. Proximity score (closer = better)
-            proximity = 1 - (landmark['distance_to_closest'] / max_distance_km)
-            proximity = max(0, proximity)  # Ensure non-negative
+            if max_distance_km is not None:
+                proximity = 1 - (landmark['distance_to_closest'] / max_distance_km)
+                proximity = max(0, proximity)  # Ensure non-negative
+            else:
+                # Global search: no proximity score
+                proximity = 0.0
             
             # 4. Popularity score (based on image count)
             image_count = landmark.get('image_count', 0)
             popularity = min(image_count / 1000, 1.0)  # Normalize
             
             # Combined score with dynamic weight normalization
-            # Redistribute visual_weight if either user has no image OR landmark has no visual data
+            is_global_search = max_distance_km is None
             has_user_image = clip_embedding is not None
-            has_landmark_visual = visual_similarity > 0  # Will be 0 if no CLIP embedding for landmark
+            has_landmark_visual = visual_similarity > 0
+            
+            # Determine which weights need redistribution
+            weights_to_redistribute = []
+            active_weights = {}
             
             if not has_user_image or not has_landmark_visual:
-                # No visual comparison possible - redistribute visual_weight proportionally
-                total_other_weights = similarity_weight + proximity_weight + popularity_weight
-                if total_other_weights > 0:
-                    # Redistribute visual_weight proportionally to other factors
-                    text_boost = visual_weight * (similarity_weight / total_other_weights)
-                    proximity_boost = visual_weight * (proximity_weight / total_other_weights)
-                    popularity_boost = visual_weight * (popularity_weight / total_other_weights)
-                    
-                    final_score = (
-                        text_similarity * (similarity_weight + text_boost) +
-                        proximity * (proximity_weight + proximity_boost) +
-                        popularity * (popularity_weight + popularity_boost)
+                weights_to_redistribute.append(('visual', visual_weight))
+            else:
+                active_weights['visual'] = (visual_similarity, visual_weight)
+            
+            if is_global_search:
+                weights_to_redistribute.append(('proximity', proximity_weight))
+            else:
+                active_weights['proximity'] = (proximity, proximity_weight)
+            
+            # Text and popularity always active
+            active_weights['text'] = (text_similarity, similarity_weight)
+            active_weights['popularity'] = (popularity, popularity_weight)
+            
+            # Redistribute inactive weights proportionally to active weights
+            if weights_to_redistribute:
+                total_redistribute = sum(w for _, w in weights_to_redistribute)
+                total_active = sum(w for _, w in active_weights.values())
+                
+                if total_active > 0:
+                    boost_factor = total_redistribute / total_active
+                    final_score = sum(
+                        score * weight * (1 + boost_factor)
+                        for score, weight in active_weights.values()
                     )
                 else:
                     final_score = text_similarity
             else:
-                # Full scoring with all factors
+                # All weights active
                 final_score = (
                     text_similarity * similarity_weight +
                     visual_similarity * visual_weight +
@@ -453,6 +489,77 @@ class RecommendationEngine:
     def get_available_landmarks(self) -> List[str]:
         """Get list of all available landmark names."""
         return sorted([lm['name'] for lm in self.landmarks])
+    
+    
+    def search_by_description(
+        self,
+        llava_description: str,
+        clip_embedding: Optional[np.ndarray] = None,
+        top_k: int = 10,
+        min_similarity: float = 0.3
+    ) -> List[Dict[str, Any]]:
+        """
+        Search entire landmark database using LLaVA description keywords.
+        No itinerary needed - pure content-based search.
+        
+        Args:
+            llava_description: Feature description from LLaVA
+            clip_embedding: Optional CLIP visual embedding
+            top_k: Number of results to return
+            min_similarity: Minimum similarity threshold
+            
+        Returns:
+            List of matching landmarks with scores
+        """
+        # Embed the query description
+        query_embedding = self.embedder.encode([llava_description])[0]
+        
+        results = []
+        for idx, landmark in enumerate(self.landmarks):
+            # Text similarity using pre-computed embeddings
+            if hasattr(self, 'landmark_embeddings'):
+                text_sim = np.dot(query_embedding, self.landmark_embeddings[idx]) / (
+                    np.linalg.norm(query_embedding) * np.linalg.norm(self.landmark_embeddings[idx])
+                )
+                text_sim = (text_sim + 1) / 2  # Normalize to 0-1
+            else:
+                text_sim = 0.5
+            
+            # Visual similarity if CLIP available
+            visual_sim = 0.0
+            if clip_embedding is not None and self.clip_embeddings is not None:
+                # Look up embedding index for this landmark
+                lm_id = landmark['landmark_id']
+                if lm_id in self.clip_id_to_idx:
+                    clip_idx = self.clip_id_to_idx[lm_id]
+                    lm_clip = self.clip_embeddings[clip_idx]
+                    visual_sim = np.dot(clip_embedding, lm_clip)
+                    visual_sim = max(0, min(1, (visual_sim + 1) / 2))
+            
+            # Combined score (60% text, 40% visual if available)
+            if visual_sim > 0:
+                final_score = 0.6 * text_sim + 0.4 * visual_sim
+            else:
+                final_score = text_sim
+            
+            # Only include if above threshold
+            if final_score >= min_similarity:
+                results.append({
+                    'landmark_id': landmark['landmark_id'],
+                    'name': landmark['name'],
+                    'description': landmark.get('description', ''),
+                    'country': landmark.get('country', 'Unknown'),
+                    'latitude': landmark.get('latitude'),
+                    'longitude': landmark.get('longitude'),
+                    'text_similarity': float(text_sim),
+                    'visual_similarity': float(visual_sim),
+                    'final_score': float(final_score)
+                })
+        
+        # Sort by score
+        results.sort(key=lambda x: x['final_score'], reverse=True)
+        
+        return results[:top_k]
 
 
 # Quick test

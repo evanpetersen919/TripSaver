@@ -37,7 +37,8 @@ def load_pipeline():
         enable_clip=True,  # Now works without FAISS index
         enable_landmark=True,
         landmark_weights_path=model_path,
-        landmark_names_path=landmark_names_path
+        landmark_names_path=landmark_names_path,
+        device='cuda' if torch.cuda.is_available() else 'cpu'  # Use GPU if available
     )
     
     # Verify models loaded correctly
@@ -88,6 +89,11 @@ def main():
         page_icon="🎯",
         layout="wide"
     )
+    
+    # Add button to clear cache and reload models on GPU
+    if st.sidebar.button("🔄 Reload Models on GPU", help="Clear cache and reinitialize all models on GPU"):
+        st.cache_resource.clear()
+        st.rerun()
     
     st.title("🎯 Computer Vision Pipeline Demo")
     st.markdown("""
@@ -176,6 +182,15 @@ def main():
                 st.success(f"### ✅ {strategy['user_message']}")
                 st.metric("Confidence", f"{strategy['confidence']:.1%}")
                 
+                # Add rejection button for high confidence predictions
+                if st.button("❌ This is incorrect - Show alternatives", key="reject_landmark"):
+                    st.warning("### 🤔 Let me show you other possibilities:")
+                    alternatives = strategy.get('alternatives', [])
+                    if alternatives:
+                        for i, alt in enumerate(alternatives, 2):  # Start from 2 since 1 was the rejected one
+                            st.markdown(f"{i}. **{alt}**")
+                    st.info("💡 Tip: This helps us improve! Consider providing feedback.")
+                
             elif strategy['mode'] == 'landmark_options':
                 st.warning(f"### 🤔 {strategy['user_message']}")
                 st.markdown("**Top 3 possibilities:**")
@@ -188,6 +203,38 @@ def main():
                         
             elif strategy['mode'] == 'scene':
                 st.info(f"### 🔍 {strategy['user_message']}")
+                
+                # Search database using LLaVA keywords
+                if strategy.get('search_keywords'):
+                    rec_engine = load_recommendation_engine()
+                    search_results = rec_engine.search_by_description(
+                        llava_description=strategy['search_keywords'],
+                        clip_embedding=strategy.get('clip_embedding'),
+                        top_k=5,
+                        min_similarity=0.3
+                    )
+                    
+                    if search_results:
+                        # Check how many have visual embeddings
+                        with_visual = sum(1 for r in search_results if r['visual_similarity'] > 0)
+                        st.markdown(f"**🎯 Matching landmarks found:** (🎨 {with_visual}/{len(search_results)} with visual similarity)")
+                        
+                        for i, result in enumerate(search_results, 1):
+                            with st.expander(f"{i}. {result['name']} — Score: {result['final_score']:.0%}", expanded=i<=3):
+                                col1, col2 = st.columns([2, 1])
+                                with col1:
+                                    st.markdown(f"📍 **{result['country']}**")
+                                    if result.get('description'):
+                                        st.caption(result['description'][:200] + "...")
+                                with col2:
+                                    st.metric("Combined Score", f"{result['final_score']:.0%}")
+                                    st.caption(f"📝 Text: {result['text_similarity']:.0%}")
+                                    if result['visual_similarity'] > 0:
+                                        st.caption(f"🎨 Visual: {result['visual_similarity']:.0%}")
+                                    else:
+                                        st.caption("🎨 Visual: N/A (no embedding)")
+                    else:
+                        st.warning("No matching landmarks found in database.")
                 
             else:  # exploration mode
                 st.info(f"### 🌍 {strategy['user_message']}")
@@ -309,34 +356,49 @@ def main():
             # Itinerary Recommendations Section
             if results.get('llava_analyzer'):
                 st.markdown("---")
-                st.markdown("### 🗺️ Find Similar Places Near Your Itinerary")
+                st.markdown("### 🗺️ Find Similar Places")
                 st.markdown("Get personalized recommendations based on this image's features")
                 
                 # Itinerary input
                 rec_engine = load_recommendation_engine()
                 available_landmarks = rec_engine.get_available_landmarks()
                 
-                col1, col2 = st.columns([3, 1])
+                # Global search option
+                search_globally = st.checkbox(
+                    "🌍 Search globally (no itinerary needed)",
+                    value=False,
+                    help="Find similar places anywhere in the world"
+                )
                 
-                with col1:
-                    selected_landmarks = st.multiselect(
-                        "Select landmarks in your itinerary:",
-                        options=available_landmarks,
-                        default=[],
-                        help="Choose landmarks you're planning to visit"
-                    )
+                if not search_globally:
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        selected_landmarks = st.multiselect(
+                            "Select landmarks in your itinerary:",
+                            options=available_landmarks,
+                            default=[],
+                            help="Choose landmarks you're planning to visit"
+                        )
+                    
+                    with col2:
+                        max_distance = st.number_input(
+                            "Max distance (km):",
+                            min_value=5,
+                            max_value=200,
+                            value=50,
+                            step=5
+                        )
+                else:
+                    selected_landmarks = []
+                    max_distance = None
                 
-                with col2:
-                    max_distance = st.number_input(
-                        "Max distance (km):",
-                        min_value=5,
-                        max_value=200,
-                        value=50,
-                        step=5
-                    )
+                # Enable button if global search OR landmarks selected
+                can_search = search_globally or len(selected_landmarks) > 0
                 
-                if st.button("🔍 Get Recommendations", type="primary") and selected_landmarks:
-                    with st.spinner("Finding similar places near your itinerary..."):
+                if st.button("🔍 Get Recommendations", type="primary", disabled=not can_search):
+                    spinner_text = "Finding similar places worldwide..." if search_globally else "Finding similar places near your itinerary..."
+                    with st.spinner(spinner_text):
                         try:
                             llava_desc = results['llava_analyzer']['description']
                             
@@ -346,11 +408,11 @@ def main():
                                 clip_embedding = results['clip_embedder'].get('embedding')
                             
                             recommendations = rec_engine.recommend(
-                                itinerary_landmarks=selected_landmarks,
+                                itinerary_landmarks=selected_landmarks if not search_globally else [],
                                 llava_description=llava_desc,
-                                max_distance_km=max_distance,
+                                max_distance_km=max_distance if not search_globally else None,
                                 clip_embedding=clip_embedding,
-                                top_k=5
+                                top_k=10 if search_globally else 5
                             )
                             
                             if recommendations:
@@ -362,7 +424,8 @@ def main():
                                         
                                         with cols[0]:
                                             st.markdown(f"**📍 Location:** {rec.country}")
-                                            st.markdown(f"**📏 Distance:** {rec.distance_km:.1f}km from {rec.closest_itinerary_item}")
+                                            if not search_globally:
+                                                st.markdown(f"**📏 Distance:** {rec.distance_km:.1f}km from {rec.closest_itinerary_item}")
                                             st.markdown(f"**🎯 Similarity:** {rec.similarity_score:.0%} match")
                                             if rec.description:
                                                 st.caption(f"💬 {rec.description}")
@@ -372,7 +435,10 @@ def main():
                                             st.metric("Coordinates", f"{rec.latitude:.4f}, {rec.longitude:.4f}")
                                 
                             else:
-                                st.warning(f"No landmarks found within {max_distance}km of your itinerary")
+                                if search_globally:
+                                    st.warning("No similar landmarks found")
+                                else:
+                                    st.warning(f"No landmarks found within {max_distance}km of your itinerary")
                         
                         except Exception as e:
                             st.error(f"Error generating recommendations: {str(e)}")

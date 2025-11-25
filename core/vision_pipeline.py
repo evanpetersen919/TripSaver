@@ -90,7 +90,8 @@ class VisionPipeline:
             print("Loading Landmark Detector...")
             self.landmark_detector = LandmarkDetector(
                 model_path=landmark_weights_path if landmark_weights_path else None,
-                landmark_names_path=landmark_names_path if landmark_names_path else None
+                landmark_names_path=landmark_names_path if landmark_names_path else None,
+                device=str(self.device)
             )
             print(f"✓ Landmark Detector ready ({self.landmark_detector.num_classes} landmarks)")
         
@@ -163,16 +164,31 @@ class VisionPipeline:
         predictions = self.landmark_detector.predict(image, top_k=5)
         elapsed = (time.time() - start) * 1000
         
-        # Confidence-based quality assessment
+        # Confidence-based quality assessment with better calibration
         top_confidence = predictions[0]['confidence']
+        second_confidence = predictions[1]['confidence'] if len(predictions) > 1 else 0
+        third_confidence = predictions[2]['confidence'] if len(predictions) > 2 else 0
         
-        # Determine confidence level
-        if top_confidence >= 0.7:
+        # Calculate confidence gap (how much more confident is #1 vs #2)
+        confidence_gap = top_confidence - second_confidence
+        
+        # Check if top predictions are too close (indicates confusion)
+        top_5_spread = max(p['confidence'] for p in predictions[:5]) - min(p['confidence'] for p in predictions[:5])
+        close_competition = top_5_spread < 0.2  # All within 20% of each other
+        
+        # Determine confidence level using multiple signals
+        # High confidence: very high score AND clear winner AND not confused
+        if top_confidence >= 0.95 and confidence_gap >= 0.3 and not close_competition:
             confidence_level = 'high'
             reliable = True
-        elif top_confidence >= 0.4:
+        # Medium confidence: decent score with some separation
+        elif top_confidence >= 0.85 and confidence_gap >= 0.15:
             confidence_level = 'medium'
             reliable = True
+        elif top_confidence >= 0.70 and confidence_gap >= 0.10:
+            confidence_level = 'medium'
+            reliable = True
+        # Low confidence: low score, close competition, or confused
         else:
             confidence_level = 'low'
             reliable = False
@@ -392,21 +408,49 @@ class VisionPipeline:
         llava_result = results.get('llava_analyzer')
         clip_result = results.get('clip_embedder')
         
-        # High confidence landmark detection
-        if landmark_result and landmark_result.get('reliable') and landmark_result['confidence'] >= 0.7:
+        # Cross-validate landmark prediction with LLaVA if available
+        llava_contradicts = False
+        if landmark_result and llava_result:
+            predicted_landmark = landmark_result['top_landmark'].lower()
+            llava_description = llava_result.get('description', '').lower()
+            
+            # Check if LLaVA description contains location keywords that contradict
+            # For example, if detector says "Eiffel Tower" but LLaVA mentions "Tokyo" or "Japan"
+            contradiction_keywords = {
+                'eiffel tower': ['tokyo', 'japan', 'japanese', 'asia'],
+                'statue of liberty': ['europe', 'asia', 'africa'],
+                'big ben': ['america', 'asia', 'france', 'italy'],
+                'taj mahal': ['europe', 'america', 'japan', 'china'],
+            }
+            
+            for landmark, contradicting_words in contradiction_keywords.items():
+                if landmark in predicted_landmark:
+                    if any(word in llava_description for word in contradicting_words):
+                        llava_contradicts = True
+                        break
+        
+        # High confidence landmark detection (only when VERY confident AND not contradicted)
+        if landmark_result and landmark_result.get('reliable') and landmark_result.get('confidence_level') == 'high' and not llava_contradicts:
+            # Include LLaVA description for cross-validation
+            llava_note = ""
+            if llava_result:
+                llava_desc = llava_result.get('description', '')[:150]
+                llava_note = f"\n\n*AI Vision sees: {llava_desc}...*"
+            
             return {
                 'mode': 'landmark',
                 'confidence': landmark_result['confidence'],
                 'primary_model': 'landmark_detector',
                 'landmark_id': landmark_result['top_landmark'],
                 'alternatives': [p['landmark'] for p in landmark_result['predictions'][1:4]],
-                'user_message': f"I'm confident this is **{landmark_result['top_landmark']}**",
+                'user_message': f"I'm confident this is **{landmark_result['top_landmark']}**{llava_note}",
                 'show_alternatives': False,
-                'fallback': 'show_alternatives'
+                'fallback': 'show_alternatives',
+                'llava_description': llava_result.get('description') if llava_result else None
             }
         
-        # Medium confidence - show options
-        elif landmark_result and landmark_result.get('confidence', 0) >= 0.4:
+        # Medium confidence - show options (most common case now)
+        elif landmark_result and landmark_result.get('confidence', 0) >= 0.5:
             top_3 = landmark_result['predictions'][:3]
             return {
                 'mode': 'landmark_options',
@@ -419,18 +463,21 @@ class VisionPipeline:
                 'fallback': 'scene_based'
             }
         
-        # Low confidence or no landmark - use scene understanding
+        # Low confidence or no landmark - use scene understanding + database search
         elif llava_result:
             description = llava_result.get('description', '')
+            clip_emb = clip_result.get('embedding') if clip_result else None
+            
             return {
                 'mode': 'scene',
                 'confidence': 0.5,
                 'primary_model': 'llava_analyzer',
                 'scene_description': description,
-                'clip_embedding': clip_result.get('embedding') if clip_result else None,
-                'user_message': f"I see: **{description[:100]}...**\n\nLet me find similar places for you!",
-                'show_alternatives': False,
-                'fallback': 'manual_search'
+                'clip_embedding': clip_emb,
+                'user_message': f"I see: **{description[:150]}...**\n\nSearching database for matching landmarks...",
+                'show_alternatives': True,
+                'fallback': 'manual_search',
+                'search_keywords': description  # Use this to search database
             }
         
         # Last resort - exploration mode
