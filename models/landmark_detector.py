@@ -180,17 +180,29 @@ class LandmarkDetector:
     
     def predict(self, 
                 image: Image.Image, 
-                top_k: int = 5) -> List[Dict[str, any]]:
+                top_k: int = 5,
+                preprocess_social_media: bool = True) -> List[Dict[str, any]]:
         """
         Predict landmarks in an image.
         
         Args:
             image: PIL Image
             top_k: Number of top predictions to return
+            preprocess_social_media: If True, automatically detect and crop UI elements
             
         Returns:
             List of dicts with 'landmark', 'confidence', and 'index'
         """
+        # Auto-detect and crop social media UI elements
+        if preprocess_social_media:
+            try:
+                from core.screenshot_processor import ScreenshotProcessor
+                preprocessor = ScreenshotProcessor()
+                image = preprocessor.preprocess(image)
+            except Exception as e:
+                # Fallback: continue without preprocessing
+                pass
+        
         # Preprocess
         img_tensor = self.transform(image).unsqueeze(0).to(self.device)
         
