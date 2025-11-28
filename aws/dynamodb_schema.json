@@ -1,0 +1,172 @@
+{
+  "description": "DynamoDB Single-Table Design for CV Location Classifier",
+  "table_name": "cv-location-app",
+  "billing_mode": "PAY_PER_REQUEST",
+  "always_free": true,
+  "free_tier_limits": {
+    "storage": "25 GB",
+    "read_capacity": "25 RCU/sec",
+    "write_capacity": "25 WCU/sec",
+    "note": "FREE FOREVER - No charges unless you exceed 25GB or sustained high traffic"
+  },
+  "partition_key": {
+    "name": "PK",
+    "type": "S",
+    "description": "Partition key for single-table design"
+  },
+  "sort_key": {
+    "name": "SK",
+    "type": "S",
+    "description": "Sort key for single-table design"
+  },
+  "global_secondary_indexes": [
+    {
+      "index_name": "GSI1",
+      "partition_key": {
+        "name": "GSI1PK",
+        "type": "S"
+      },
+      "sort_key": {
+        "name": "GSI1SK",
+        "type": "S"
+      },
+      "projection": "ALL"
+    },
+    {
+      "index_name": "GSI2",
+      "partition_key": {
+        "name": "GSI2PK",
+        "type": "S"
+      },
+      "sort_key": {
+        "name": "GSI2SK",
+        "type": "S"
+      },
+      "projection": "ALL"
+    }
+  ],
+  "access_patterns": {
+    "users": {
+      "1_get_user_by_id": {
+        "PK": "USER#<user_id>",
+        "SK": "PROFILE"
+      },
+      "2_get_user_by_email": {
+        "GSI1PK": "USER#EMAIL#<email>",
+        "GSI1SK": "USER#EMAIL#<email>"
+      },
+      "3_get_user_by_username": {
+        "GSI2PK": "USER#USERNAME#<username>",
+        "GSI2SK": "USER#USERNAME#<username>"
+      }
+    },
+    "itineraries": {
+      "1_get_user_itineraries": {
+        "PK": "USER#<user_id>",
+        "SK": "begins_with(ITINERARY#)"
+      },
+      "2_get_itinerary_by_id": {
+        "PK": "USER#<user_id>",
+        "SK": "ITINERARY#<itinerary_id>"
+      }
+    },
+    "predictions": {
+      "1_get_user_predictions": {
+        "PK": "USER#<user_id>",
+        "SK": "begins_with(PREDICTION#)"
+      },
+      "2_get_prediction_by_id": {
+        "PK": "USER#<user_id>",
+        "SK": "PREDICTION#<prediction_id>"
+      },
+      "3_get_predictions_by_itinerary": {
+        "GSI1PK": "ITINERARY#<itinerary_id>",
+        "GSI1SK": "begins_with(PREDICTION#)"
+      }
+    },
+    "feedback": {
+      "1_get_feedback_by_prediction": {
+        "PK": "PREDICTION#<prediction_id>",
+        "SK": "FEEDBACK"
+      },
+      "2_get_user_feedback": {
+        "GSI1PK": "USER#<user_id>",
+        "GSI1SK": "begins_with(FEEDBACK#)"
+      }
+    }
+  },
+  "example_items": {
+    "user_profile": {
+      "PK": "USER#12345",
+      "SK": "PROFILE",
+      "GSI1PK": "USER#EMAIL#john@example.com",
+      "GSI1SK": "USER#EMAIL#john@example.com",
+      "GSI2PK": "USER#USERNAME#john_doe",
+      "GSI2SK": "USER#USERNAME#john_doe",
+      "entity_type": "User",
+      "email": "john@example.com",
+      "username": "john_doe",
+      "hashed_password": "$2b$12$...",
+      "first_name": "John",
+      "last_name": "Doe",
+      "is_active": true,
+      "is_verified": false,
+      "created_at": "2025-11-27T10:30:00Z",
+      "updated_at": "2025-11-27T10:30:00Z",
+      "last_login": "2025-11-27T12:00:00Z"
+    },
+    "itinerary": {
+      "PK": "USER#12345",
+      "SK": "ITINERARY#67890",
+      "GSI1PK": "ITINERARY#67890",
+      "GSI1SK": "ITINERARY#67890",
+      "entity_type": "Itinerary",
+      "itinerary_id": "67890",
+      "name": "Paris Trip 2025",
+      "landmarks": ["Eiffel Tower", "Louvre", "Arc de Triomphe"],
+      "description": "Summer vacation in Paris",
+      "center_lat": 48.8566,
+      "center_lon": 2.3522,
+      "is_active": true,
+      "created_at": "2025-11-27T10:35:00Z",
+      "updated_at": "2025-11-27T10:35:00Z"
+    },
+    "prediction": {
+      "PK": "USER#12345",
+      "SK": "PREDICTION#2025-11-27T12:30:00Z#abc123",
+      "GSI1PK": "ITINERARY#67890",
+      "GSI1SK": "PREDICTION#2025-11-27T12:30:00Z#abc123",
+      "entity_type": "Prediction",
+      "prediction_id": "abc123",
+      "itinerary_id": "67890",
+      "image_url": "https://s3.amazonaws.com/...",
+      "image_hash": "sha256...",
+      "predicted_landmark": "Notre-Dame Cathedral",
+      "confidence": 0.92,
+      "model_version": "500class_v1",
+      "top_k_predictions": [
+        {"landmark": "Notre-Dame Cathedral", "confidence": 0.92},
+        {"landmark": "Sainte-Chapelle", "confidence": 0.05}
+      ],
+      "llava_description": "Gothic cathedral with stained glass...",
+      "clip_embedding": "[512 floats array]",
+      "recommendations": "[array of recommended landmarks]",
+      "inference_time_ms": 245.3,
+      "created_at": "2025-11-27T12:30:00Z"
+    },
+    "feedback": {
+      "PK": "PREDICTION#abc123",
+      "SK": "FEEDBACK",
+      "GSI1PK": "USER#12345",
+      "GSI1SK": "FEEDBACK#2025-11-27T12:35:00Z",
+      "entity_type": "Feedback",
+      "prediction_id": "abc123",
+      "user_id": "12345",
+      "is_correct": true,
+      "corrected_landmark": null,
+      "confidence_level": "high",
+      "comments": "Perfect match!",
+      "created_at": "2025-11-27T12:35:00Z"
+    }
+  }
+}
