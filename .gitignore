@@ -54,3 +54,11 @@ __pycache__/
 *.pyc
 .vscode/
 *.log
+
+# Environment variables (contains secrets)
+.env
+
+# Lambda deployment
+layers/
+.aws-sam/
+samconfig.toml

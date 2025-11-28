@@ -1,0 +1,327 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  CV Location Classifier - Serverless AI Travel Recommendation System
+  
+  Landmark detection, travel recommendations, and user authentication
+  using AWS Lambda, API Gateway, and DynamoDB (Always Free Tier)
+
+# ============================================================================
+# GLOBAL CONFIGURATION
+# ============================================================================
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 2048
+    Runtime: python3.11
+    Environment:
+      Variables:
+        DYNAMODB_TABLE: !Ref LocationClassifierTable
+        AWS_REGION: !Ref AWS::Region
+        HUGGINGFACE_API_TOKEN: !Ref HuggingFaceAPIToken
+        JWT_SECRET: !Ref JWTSecret
+        ALLOWED_ORIGINS: !Ref AllowedOrigins
+        LANDMARK_MODEL_PATH: /opt/models/landmark_detector_1000classes_best.pth
+        LANDMARK_NAMES_PATH: /opt/models/landmark_names_100classes.json
+        LANDMARKS_DATABASE_PATH: /opt/data/landmarks_unified.json
+    Layers:
+      - !Ref PythonDependenciesLayer
+      - !Ref ModelsLayer
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization'"
+      AllowOrigin: "'*'"
+
+# ============================================================================
+# PARAMETERS
+# ============================================================================
+Parameters:
+  HuggingFaceAPIToken:
+    Type: String
+    NoEcho: true
+    Description: Hugging Face API token for LLaVA inference
+    
+  JWTSecret:
+    Type: String
+    NoEcho: true
+    Description: Secret key for JWT token signing (use strong random string)
+    
+  AllowedOrigins:
+    Type: String
+    Default: "*"
+    Description: Comma-separated list of allowed CORS origins (e.g., https://myapp.com)
+
+# ============================================================================
+# RESOURCES
+# ============================================================================
+Resources:
+
+  # ==========================================================================
+  # LAMBDA LAYERS
+  # ==========================================================================
+  
+  PythonDependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: cv-classifier-dependencies
+      Description: Python dependencies (torch, transformers, fastapi, etc.)
+      ContentUri: layers/python-dependencies/
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: python3.11
+      BuildArchitecture: x86_64
+
+  ModelsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: cv-classifier-models
+      Description: Trained models and landmark database
+      ContentUri: layers/models/
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Retain
+
+  # ==========================================================================
+  # API GATEWAY
+  # ==========================================================================
+  
+  LocationClassifierAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Name: cv-location-classifier-api
+      Description: REST API for CV Location Classifier
+      EndpointConfiguration:
+        Type: REGIONAL
+      Auth:
+        DefaultAuthorizer: NONE
+      BinaryMediaTypes:
+        - 'image/*'
+        - 'multipart/form-data'
+
+  # ==========================================================================
+  # LAMBDA FUNCTIONS
+  # ==========================================================================
+  
+  LocationClassifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cv-location-classifier
+      Description: Main API handler for CV Location Classifier
+      CodeUri: api/
+      Handler: main.handler
+      Timeout: 60
+      MemorySize: 3008
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: cv-location-classifier
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LocationClassifierTable
+      Events:
+        # Root
+        Root:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /
+            Method: GET
+        
+        # Health
+        HealthCheck:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /health
+            Method: GET
+        
+        # Info
+        Info:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /info
+            Method: GET
+        
+        # Auth endpoints
+        Signup:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /auth/signup
+            Method: POST
+        
+        Login:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /auth/login
+            Method: POST
+        
+        PasswordResetRequest:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /auth/password-reset/request
+            Method: POST
+        
+        PasswordResetConfirm:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /auth/password-reset/confirm
+            Method: POST
+        
+        # User endpoints
+        UserProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /user/profile
+            Method: GET
+        
+        # Prediction endpoints
+        Predict:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /predict
+            Method: POST
+        
+        # Recommendation endpoints
+        Recommend:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /recommend
+            Method: POST
+        
+        # Itinerary endpoints
+        ItineraryAdd:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /itinerary/add
+            Method: POST
+        
+        ItineraryList:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /itinerary/list
+            Method: GET
+        
+        ItineraryDelete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /itinerary/{itinerary_id}
+            Method: DELETE
+        
+        # Feedback endpoints
+        Feedback:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /feedback
+            Method: POST
+
+  # ==========================================================================
+  # DYNAMODB TABLE
+  # ==========================================================================
+  
+  LocationClassifierTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: cv-location-app
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1_PK
+          AttributeType: S
+        - AttributeName: GSI1_SK
+          AttributeType: S
+        - AttributeName: GSI2_PK
+          AttributeType: S
+        - AttributeName: GSI2_SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1_PK
+              KeyType: HASH
+            - AttributeName: GSI1_SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: GSI2
+          KeySchema:
+            - AttributeName: GSI2_PK
+              KeyType: HASH
+            - AttributeName: GSI2_SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Application
+          Value: cv-location-classifier
+        - Key: Environment
+          Value: production
+
+# ============================================================================
+# OUTPUTS
+# ============================================================================
+Outputs:
+  
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${LocationClassifierAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiEndpoint"
+  
+  ApiId:
+    Description: API Gateway ID
+    Value: !Ref LocationClassifierAPI
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiId"
+  
+  FunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt LocationClassifierFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-FunctionArn"
+  
+  FunctionName:
+    Description: Lambda Function Name
+    Value: !Ref LocationClassifierFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-FunctionName"
+  
+  DynamoDBTableName:
+    Description: DynamoDB Table Name
+    Value: !Ref LocationClassifierTable
+    Export:
+      Name: !Sub "${AWS::StackName}-TableName"
+  
+  DynamoDBTableArn:
+    Description: DynamoDB Table ARN
+    Value: !GetAtt LocationClassifierTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-TableArn"
