@@ -333,12 +333,12 @@ aws dynamodb scan --table-name cv-location-app --max-items 10
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file
+MIT License
 
 ## Author
 
 **Evan Petersen**  
-[GitHub](https://github.com/evanpetersen919) | [LinkedIn](https://linkedin.com/in/evanpetersen919)
+[GitHub](https://github.com/evanpetersen919) | [LinkedIn](https://www.linkedin.com/in/evan-petersen-b93037386/)
 
 ## Acknowledgments
 
