@@ -333,7 +333,7 @@ aws dynamodb scan --table-name cv-location-app --max-items 10
 
 ## License
 
-MIT License
+MIT License - see [LICENSE](LICENSE) file
 
 ## Author
 
