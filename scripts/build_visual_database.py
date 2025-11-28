@@ -2,7 +2,7 @@
 Build CLIP visual embeddings database from Google Landmarks v2 images.
 
 This script:
-1. Loads the 15,880 landmarks from landmarks_unified.json
+1. Loads landmarks from landmarks_unified.json
 2. Finds corresponding images from Google Landmarks v2 dataset
 3. Encodes images with CLIP (batch processing)
 4. Saves embeddings to data/landmarks_clip_embeddings.npy
@@ -134,18 +134,24 @@ def main():
     embedding_dim = 512  # CLIP ViT-B/32 dimension
     
     # Filter to landmarks with BOTH images AND coordinates
+    # - Google landmarks: landmark_id is int AND has coordinates
+    # - WikiData landmarks: has google_landmark_id field AND has coordinates
     landmark_ids = []
     for lm_id, lm_data in landmarks.items():
         has_coords = 'latitude' in lm_data and 'longitude' in lm_data
-        has_images = isinstance(lm_id, int) or 'google_landmark_id' in lm_data
+        has_images = (isinstance(lm_id, int)) or ('google_landmark_id' in lm_data)
+        
         if has_coords and has_images:
+            # Use google_landmark_id for image lookup if available (WikiData landmarks)
+            # Otherwise use the landmark_id itself (Google landmarks)
             google_id = lm_data.get('google_landmark_id', lm_id)
             if isinstance(google_id, int):
                 landmark_ids.append(google_id)
-    landmark_ids = sorted(set(landmark_ids))
+    
+    landmark_ids = sorted(set(landmark_ids))  # Remove duplicates
     embeddings_dict = {}
     
-    print(f"\nProcessing {len(landmark_ids)} landmarks...")
+    print(f"\nProcessing {len(landmark_ids)} landmarks with images AND coordinates...")
     print(f"Using up to {args.images_per_landmark} images per landmark")
     print(f"Images directory: {images_dir}")
     
@@ -223,5 +229,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 
