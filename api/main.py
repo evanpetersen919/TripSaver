@@ -97,11 +97,22 @@ def get_landmark_detector():
     """Call Hugging Face Space for landmark detection"""
     # Use HF Space instead of local model
     import requests
+    import json
+    from pathlib import Path
     
     HF_SPACE_URL = "https://evanpetersen919-cv-location-classifier.hf.space/predict"
     
+    # Load landmark name mapping
+    mapping_path = Path(__file__).parent.parent / "data" / "checkpoints" / "landmark_names_500classes.json"
+    with open(mapping_path, 'r', encoding='utf-8') as f:
+        name_mapping = json.load(f)
+    idx_to_name = name_mapping['idx_to_name']
+    
     class HFSpaceLandmarkDetector:
         """Wrapper to call HF Space API"""
+        
+        def __init__(self, idx_to_name_map):
+            self.idx_to_name = idx_to_name_map
         
         def predict(self, image: Image.Image, top_k: int = 5):
             """Send image to HF Space and get predictions"""
@@ -120,19 +131,21 @@ def get_landmark_detector():
             if not result.get('success'):
                 raise Exception(f"HF Space error: {result.get('error', 'Unknown error')}")
             
-            # Convert to expected format (class_id -> landmark name)
-            # For now, use class_id as landmark name (you'll need a mapping file)
+            # Convert to expected format with proper landmark names
             predictions = []
             for pred in result['predictions'][:top_k]:
+                class_id = pred['class_id']
+                landmark_name = self.idx_to_name.get(str(class_id), f"unknown_landmark_{class_id}")
+                
                 predictions.append({
-                    'landmark': f"landmark_{pred['class_id']}",  # TODO: Add proper name mapping
+                    'landmark': landmark_name,
                     'confidence': pred['confidence'],
-                    'class_idx': pred['class_id']
+                    'class_idx': class_id
                 })
             
             return predictions
     
-    return HFSpaceLandmarkDetector()
+    return HFSpaceLandmarkDetector(idx_to_name)
 
 
 def get_clip_embedder():
