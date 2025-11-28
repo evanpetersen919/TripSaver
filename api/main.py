@@ -37,7 +37,7 @@ from core.auth import (
     reset_password, decode_access_token
 )
 from models.huggingface_client import HuggingFaceClient
-from models.landmark_detector import LandmarkDetector
+# LandmarkDetector now called via HF Space API
 from models.clip_embedder import ClipEmbedder
 from core.recommendation_engine import RecommendationEngine
 from core.config import config
@@ -77,7 +77,7 @@ table = dynamodb.Table(os.getenv('DYNAMODB_TABLE', 'cv-location-app'))
 # ============================================================================
 
 huggingface_client = None
-landmark_detector = None
+# landmark_detector now via HF Space (no global state)
 clip_embedder = None
 recommendation_engine = None
 
@@ -94,21 +94,45 @@ def get_huggingface_client():
 
 
 def get_landmark_detector():
-    """Lazy load landmark detector"""
-    global landmark_detector
-    if landmark_detector is None:
-        model_path = os.getenv('LANDMARK_MODEL_PATH')
-        landmark_names_path = os.getenv('LANDMARK_NAMES_PATH')
+    """Call Hugging Face Space for landmark detection"""
+    # Use HF Space instead of local model
+    import requests
+    
+    HF_SPACE_URL = "https://evanpetersen919-cv-location-classifier.hf.space/predict"
+    
+    class HFSpaceLandmarkDetector:
+        """Wrapper to call HF Space API"""
         
-        if not model_path or not Path(model_path).exists():
-            raise ValueError(f"Landmark model not found: {model_path}")
-        
-        landmark_detector = LandmarkDetector(
-            model_path=model_path,
-            landmark_names_path=landmark_names_path,
-            device='cpu'  # Lambda uses CPU
-        )
-    return landmark_detector
+        def predict(self, image: Image.Image, top_k: int = 5):
+            """Send image to HF Space and get predictions"""
+            # Convert PIL Image to bytes
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='JPEG')
+            img_byte_arr.seek(0)
+            
+            # Call HF Space
+            files = {'image': ('image.jpg', img_byte_arr, 'image/jpeg')}
+            response = requests.post(HF_SPACE_URL, files=files, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            if not result.get('success'):
+                raise Exception(f"HF Space error: {result.get('error', 'Unknown error')}")
+            
+            # Convert to expected format (class_id -> landmark name)
+            # For now, use class_id as landmark name (you'll need a mapping file)
+            predictions = []
+            for pred in result['predictions'][:top_k]:
+                predictions.append({
+                    'landmark': f"landmark_{pred['class_id']}",  # TODO: Add proper name mapping
+                    'confidence': pred['confidence'],
+                    'class_idx': pred['class_id']
+                })
+            
+            return predictions
+    
+    return HFSpaceLandmarkDetector()
 
 
 def get_clip_embedder():
