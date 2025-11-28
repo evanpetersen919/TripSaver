@@ -1,0 +1,44 @@
+# Exclude large datasets and training data
+data/google_landmarks/**
+data/landmarks_1000class/**
+data/landmarks_500class/train/**
+data/landmarks_500class/val/**
+data/sample_images/**
+data/cache/**
+data/embeddings/**
+
+# Exclude model checkpoints (we use HF Space)
+data/checkpoints/*.pth
+data/checkpoints/resnet50_places365.pth.tar
+
+# Exclude scripts and tests
+scripts/**
+tests/**
+mlruns/**
+
+# Exclude docs
+docs/**
+huggingface_space/**
+layers/**
+
+# Exclude development files
+.env
+.env.*
+*.pyc
+__pycache__/**
+.pytest_cache/**
+.vscode/**
+.git/**
+.gitignore
+
+# Exclude AWS files
+.aws-sam/**
+samconfig.toml
+
+# Keep only necessary files:
+# - api/ (Lambda handler)
+# - core/ (auth, config, recommendation_engine)
+# - models/ (huggingface_client, clip_embedder - but NOT landmark_detector)
+# - data/checkpoints/landmark_names_500classes.json (name mapping)
+# - data/landmarks_unified.json (for recommendations)
+# - requirements.txt

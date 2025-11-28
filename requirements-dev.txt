@@ -1,0 +1,31 @@
+# Core Dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+pillow>=9.0.0
+numpy>=1.24.0
+
+# CV Models
+transformers>=4.30.0
+clip-by-openai>=1.0
+faiss-cpu>=1.7.2
+
+# AWS & Authentication
+boto3>=1.28.0
+PyJWT>=2.8.0
+bcrypt>=4.0.1
+python-dotenv>=1.0.0
+
+# Hugging Face API
+requests>=2.31.0
+
+# FastAPI
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+mangum>=0.17.0
+python-multipart>=0.0.6
+pydantic[email]>=2.5.0
+
+# Utilities
+rich>=13.0.0
+argparse
+pytest>=7.0.0

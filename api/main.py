@@ -30,7 +30,9 @@ from dotenv import load_dotenv
 
 # Local imports
 import sys
-sys.path.append(str(Path(__file__).parent.parent))
+# Add both parent directory and current directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
 
 from core.auth import (
     signup, login, require_auth, request_password_reset, 
@@ -102,8 +104,11 @@ def get_landmark_detector():
     
     HF_SPACE_URL = "https://evanpetersen919-cv-location-classifier.hf.space/predict"
     
-    # Load landmark name mapping
-    mapping_path = Path(__file__).parent.parent / "data" / "checkpoints" / "landmark_names_500classes.json"
+    # Load landmark name mapping (works both locally and in Lambda)
+    mapping_path = Path(__file__).parent / "data" / "checkpoints" / "landmark_names_500classes.json"
+    if not mapping_path.exists():
+        # Fallback for local development
+        mapping_path = Path(__file__).parent.parent / "data" / "checkpoints" / "landmark_names_500classes.json"
     with open(mapping_path, 'r', encoding='utf-8') as f:
         name_mapping = json.load(f)
     idx_to_name = name_mapping['idx_to_name']
