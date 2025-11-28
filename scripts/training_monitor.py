@@ -171,7 +171,7 @@ class CheckpointManager:
         
         # Filename
         if is_best:
-            filename = "landmark_detector_1000classes_best.pth"
+            filename = "landmark_detector_500classes_best.pth"
         else:
             filename = f"landmark_detector_1000classes_epoch_{epoch}.pth"
         

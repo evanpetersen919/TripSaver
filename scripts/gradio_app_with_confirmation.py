@@ -24,7 +24,7 @@ class LandmarkDetectionApp:
     
     def __init__(self):
         # Initialize confidence router
-        model_path = "data/checkpoints/landmark_detector_1000classes_best.pth"
+        model_path = "data/checkpoints/landmark_detector_500classes_best.pth"
         class_mapping_path = "data/landmarks_500class/class_mapping.json"
         feedback_log_path = "data/user_feedback.json"
         

@@ -21,12 +21,12 @@ Globals:
         HUGGINGFACE_API_TOKEN: !Ref HuggingFaceAPIToken
         JWT_SECRET: !Ref JWTSecret
         ALLOWED_ORIGINS: !Ref AllowedOrigins
-        LANDMARK_MODEL_PATH: /opt/models/landmark_detector_1000classes_best.pth
+        LANDMARK_MODEL_PATH: /opt/models/landmark_detector_500classes_best.pth
         LANDMARK_NAMES_PATH: /opt/models/landmark_names_100classes.json
         LANDMARKS_DATABASE_PATH: /opt/data/landmarks_unified.json
-    Layers:
-      - !Ref PythonDependenciesLayer
-      - !Ref ModelsLayer
+    # Layers:
+    #   - !Ref PythonDependenciesLayer
+    #   - !Ref ModelsLayer
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -61,28 +61,30 @@ Resources:
   # LAMBDA LAYERS
   # ==========================================================================
   
-  PythonDependenciesLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: cv-classifier-dependencies
-      Description: Python dependencies (torch, transformers, fastapi, etc.)
-      ContentUri: layers/python-dependencies/
-      CompatibleRuntimes:
-        - python3.11
-      RetentionPolicy: Retain
-    Metadata:
-      BuildMethod: python3.11
-      BuildArchitecture: x86_64
+  # Note: Lambda layers commented out for initial deployment
+  # Models are too large (250MB+ limit). Will load from S3 or use lighter inference.
+  # PythonDependenciesLayer:
+  #   Type: AWS::Serverless::LayerVersion
+  #   Properties:
+  #     LayerName: cv-classifier-dependencies
+  #     Description: Python dependencies (torch, transformers, fastapi, etc.)
+  #     ContentUri: layers/python-dependencies/
+  #     CompatibleRuntimes:
+  #       - python3.11
+  #     RetentionPolicy: Retain
+  #   Metadata:
+  #     BuildMethod: python3.11
+  #     BuildArchitecture: x86_64
 
-  ModelsLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: cv-classifier-models
-      Description: Trained models and landmark database
-      ContentUri: layers/models/
-      CompatibleRuntimes:
-        - python3.11
-      RetentionPolicy: Retain
+  # ModelsLayer:
+  #   Type: AWS::Serverless::LayerVersion
+  #   Properties:
+  #     LayerName: cv-classifier-models
+  #     Description: Trained models and landmark database
+  #     ContentUri: layers/models/
+  #     CompatibleRuntimes:
+  #       - python3.11
+  #     RetentionPolicy: Retain
 
   # ==========================================================================
   # API GATEWAY

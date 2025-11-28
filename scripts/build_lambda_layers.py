@@ -186,7 +186,7 @@ def create_models_layer():
         return False
     
     files_to_copy = [
-        "landmark_detector_1000classes_best.pth",
+        "landmark_detector_500classes_best.pth",
         "landmark_names_100classes.json",
         "best_hyperparameters.json"
     ]

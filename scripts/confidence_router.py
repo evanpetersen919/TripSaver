@@ -334,7 +334,7 @@ def test_confidence_router():
     from torchvision import transforms
     
     # Paths
-    model_path = "data/checkpoints/landmark_detector_1000classes_best.pth"
+    model_path = "data/checkpoints/landmark_detector_500classes_best.pth"
     class_mapping_path = "data/landmarks_500class/class_mapping.json"
     val_manifest_path = "data/landmarks_500class/val_manifest.json"
     
