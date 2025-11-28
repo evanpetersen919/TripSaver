@@ -9,6 +9,12 @@ transformers>=4.30.0
 clip-by-openai>=1.0
 faiss-gpu>=1.7.2
 
+# AWS & Authentication
+boto3>=1.28.0
+PyJWT>=2.8.0
+bcrypt>=4.0.1
+python-dotenv>=1.0.0
+
 # Utilities
 rich>=13.0.0
 argparse
