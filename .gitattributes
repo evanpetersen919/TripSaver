@@ -1,0 +1,9 @@
+# Frontend files
+frontend/**/*.tsx linguist-language=TypeScript
+frontend/**/*.ts linguist-language=TypeScript
+frontend/**/*.jsx linguist-language=JavaScript
+frontend/**/*.js linguist-language=JavaScript
+frontend/**/*.css linguist-language=CSS
+
+# Backend files
+*.py linguist-language=Python
