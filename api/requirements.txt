@@ -17,3 +17,4 @@ requests>=2.31.0
 # Basic utilities
 pillow>=9.0.0
 numpy<2.0.0
+python-dotenv>=1.0.0

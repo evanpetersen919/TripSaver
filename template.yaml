@@ -121,6 +121,10 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref LocationClassifierTable
+        - CloudWatchPutMetricPolicy: {}
+      # Enable Lambda Insights for enhanced monitoring (stays in free tier)
+      Layers:
+        - !Sub "arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:14"
       Events:
         # Root
         Root:
@@ -230,6 +234,200 @@ Resources:
             Method: POST
 
   # ==========================================================================
+  # CLOUDWATCH LOGGING
+  # ==========================================================================
+  
+  LocationClassifierLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cv-location-classifier
+      RetentionInDays: 7  # Free tier: 5GB ingestion, 5GB archive per month
+
+  # ==========================================================================
+  # CLOUDWATCH ALARMS
+  # ==========================================================================
+  
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cv-location-classifier-errors
+      AlarmDescription: Alert when Lambda function has errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LocationClassifierFunction
+      TreatMissingData: notBreaching
+
+  LambdaThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cv-location-classifier-throttles
+      AlarmDescription: Alert when Lambda function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LocationClassifierFunction
+      TreatMissingData: notBreaching
+
+  LambdaDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cv-location-classifier-duration
+      AlarmDescription: Alert when Lambda duration is high
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 50000  # 50 seconds (timeout is 60)
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LocationClassifierFunction
+      TreatMissingData: notBreaching
+
+  ApiGateway4xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cv-location-classifier-4xx-errors
+      AlarmDescription: Alert on high rate of 4xx errors
+      MetricName: 4XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 50
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: cv-location-classifier-api
+      TreatMissingData: notBreaching
+
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cv-location-classifier-5xx-errors
+      AlarmDescription: Alert on high rate of 5xx errors
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: cv-location-classifier-api
+      TreatMissingData: notBreaching
+
+  # ==========================================================================
+  # CLOUDWATCH DASHBOARD
+  # ==========================================================================
+  
+  MonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: cv-location-classifier-monitoring
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", {"stat": "Sum", "label": "Invocations"}],
+                  [".", "Errors", {"stat": "Sum", "label": "Errors"}],
+                  [".", "Throttles", {"stat": "Sum", "label": "Throttles"}]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Invocations & Errors",
+                "period": 300,
+                "dimensions": {
+                  "FunctionName": "${LocationClassifierFunction}"
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Duration", {"stat": "Average", "label": "Avg Duration"}],
+                  ["...", {"stat": "Maximum", "label": "Max Duration"}]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Duration",
+                "period": 300,
+                "yAxis": {"left": {"label": "ms"}},
+                "dimensions": {
+                  "FunctionName": "${LocationClassifierFunction}"
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/ApiGateway", "Count", {"stat": "Sum", "label": "Total Requests"}],
+                  [".", "4XXError", {"stat": "Sum", "label": "4xx Errors"}],
+                  [".", "5XXError", {"stat": "Sum", "label": "5xx Errors"}]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "API Gateway Requests",
+                "period": 300,
+                "dimensions": {
+                  "ApiName": "cv-location-classifier-api"
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/ApiGateway", "Latency", {"stat": "Average", "label": "Avg Latency"}],
+                  ["...", {"stat": "p99", "label": "P99 Latency"}]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "API Gateway Latency",
+                "period": 300,
+                "yAxis": {"left": {"label": "ms"}},
+                "dimensions": {
+                  "ApiName": "cv-location-classifier-api"
+                }
+              }
+            },
+            {
+              "type": "log",
+              "properties": {
+                "query": "SOURCE '/aws/lambda/cv-location-classifier'\n| fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 20",
+                "region": "${AWS::Region}",
+                "title": "Recent Errors",
+                "stacked": false
+              }
+            }
+          ]
+        }
+
+  # ==========================================================================
   # DYNAMODB TABLE
   # ==========================================================================
   
@@ -323,3 +521,11 @@ Outputs:
     Value: !GetAtt LocationClassifierTable.Arn
     Export:
       Name: !Sub "${AWS::StackName}-TableArn"
+  
+  CloudWatchDashboard:
+    Description: CloudWatch Dashboard URL
+    Value: !Sub "https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=cv-location-classifier-monitoring"
+  
+  CloudWatchLogs:
+    Description: CloudWatch Logs URL
+    Value: !Sub "https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#logsV2:log-groups/log-group/$252Faws$252Flambda$252Fcv-location-classifier"

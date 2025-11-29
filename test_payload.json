@@ -1,0 +1,5 @@
+{
+  "httpMethod": "GET",
+  "path": "/health",
+  "headers": {}
+}

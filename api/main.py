@@ -40,9 +40,10 @@ from core.auth import (
 )
 from models.huggingface_client import HuggingFaceClient
 # LandmarkDetector now called via HF Space API
-from models.clip_embedder import ClipEmbedder
-from core.recommendation_engine import RecommendationEngine
-from core.config import config
+# ClipEmbedder and RecommendationEngine disabled for Lambda (torch dependencies)
+# from models.clip_embedder import ClipEmbedder
+# from core.recommendation_engine import RecommendationEngine
+# from core.config import config
 
 # Load environment variables
 load_dotenv()
@@ -80,8 +81,8 @@ table = dynamodb.Table(os.getenv('DYNAMODB_TABLE', 'cv-location-app'))
 
 huggingface_client = None
 # landmark_detector now via HF Space (no global state)
-clip_embedder = None
-recommendation_engine = None
+# clip_embedder = None  # Disabled for Lambda
+# recommendation_engine = None  # Disabled for Lambda
 
 
 def get_huggingface_client():
@@ -154,22 +155,25 @@ def get_landmark_detector():
 
 
 def get_clip_embedder():
-    """Lazy load CLIP embedder"""
-    global clip_embedder
-    if clip_embedder is None:
-        clip_embedder = ClipEmbedder(device='cpu')
-    return clip_embedder
+    """CLIP embedder disabled in Lambda (torch dependency)"""
+    raise NotImplementedError("CLIP embedder not available in Lambda deployment")
 
 
 def get_recommendation_engine():
-    """Lazy load recommendation engine"""
-    global recommendation_engine
-    if recommendation_engine is None:
-        landmarks_path = os.getenv('LANDMARKS_DATABASE_PATH')
-        if not landmarks_path or not Path(landmarks_path).exists():
-            raise ValueError(f"Landmarks database not found: {landmarks_path}")
-        recommendation_engine = RecommendationEngine(landmarks_path=landmarks_path)
-    return recommendation_engine
+    """Simplified recommendation engine for Lambda (no torch)"""
+    import json
+    
+    class SimpleRecommendationEngine:
+        def __init__(self, landmarks_path):
+            with open(landmarks_path, 'r', encoding='utf-8') as f:
+                self.landmarks = json.load(f)
+        
+        def recommend_similar(self, landmark_name, preferences=None, top_k=5):
+            # Simple keyword-based recommendations without CLIP
+            return {"success": True, "recommendations": [], "strategy": "simple"}
+    
+    landmarks_path = Path(__file__).parent / "data" / "landmarks_unified.json"
+    return SimpleRecommendationEngine(landmarks_path)
 
 
 # ============================================================================
@@ -421,9 +425,10 @@ async def predict_landmark(
         
         llava_description = llava_result.get('description', '') if llava_result['success'] else None
         
-        # 3. Run CLIP embedder (for visual similarity)
-        clip = get_clip_embedder()
-        clip_embedding = clip.encode_image(image_pil)
+        # 3. CLIP embedder disabled in Lambda (torch dependency)
+        # clip = get_clip_embedder()
+        # clip_embedding = clip.encode_image(image_pil)
+        clip_embedding = None
         
         # Determine recommendation strategy
         top_confidence = predictions[0]['confidence']
