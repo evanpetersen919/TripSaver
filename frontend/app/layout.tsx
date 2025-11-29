@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
+import Image from "next/image";
+import { Inter } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'], weight: ['300', '400', '600', '700'] });
 
 export const metadata: Metadata = {
   title: "TripSaver - AI-Powered Travel Planning",
@@ -14,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
+      <body className={`${inter.className} antialiased`}>
         {/* Header */}
         <header 
           className="fixed top-0 left-0 right-0 z-50 bg-zinc-900 bg-opacity-10 backdrop-blur-md px-8 py-6 border-b border-stone-800 border-opacity-30"
@@ -25,7 +29,9 @@ export default function RootLayout({
           } as React.CSSProperties}
         >
           <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <Link href="/" className="text-2xl font-light text-orange-400 hover:text-orange-300 transition-colors">TripSaver</Link>
+            <Link href="/" className="hover:opacity-80 transition-opacity">
+              <Image src="/images/logo.png" alt="TripSaver" width={50} height={50} quality={100} />
+            </Link>
             <div className="flex gap-4">
               <Link href="/login" className="px-4 py-2 text-orange-400 hover:text-orange-300 font-light transition-colors">
                 Log In

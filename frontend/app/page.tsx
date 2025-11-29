@@ -24,7 +24,9 @@ export default function Home() {
         
         {/* Content */}
         <div className="relative z-10 max-w-5xl mx-auto text-center">
-          <h1 className="text-7xl font-bold text-white mb-6 tracking-tight">TripSaver</h1>
+          <div className="flex justify-center mb-4">
+            <Image src="/images/logo_text.png" alt="TripSaver" width={700} height={400} quality={100} className="h-auto" />
+          </div>
           <p className="text-xl text-stone-200 max-w-2xl mx-auto mb-10 font-light leading-relaxed">
             Transform your travel photos into landmark discoveries with AI-powered visual recognition and intelligent location recommendations
           </p>
