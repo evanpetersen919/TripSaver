@@ -58,6 +58,9 @@ export default function Dashboard() {
   const [destinationSuggestions, setDestinationSuggestions] = useState<string[]>([]);
   const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
   const [isEditingDestination, setIsEditingDestination] = useState(false);
+  const [showMoreInfo, setShowMoreInfo] = useState<string | null>(null);
+  const [placeDetails, setPlaceDetails] = useState<any>(null);
+  const [loadingPlaceDetails, setLoadingPlaceDetails] = useState(false);
   
   // Debounce timers
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -102,25 +105,6 @@ export default function Dashboard() {
       }
     }
 
-    // Preload popular locations and landmarks to warm up cache
-    const popularLocations = [
-      'tokyo', 'tokyo tower', 'tokyo skytree',
-      'paris', 'eiffel tower', 'louvre',
-      'london', 'big ben', 'london eye',
-      'new york', 'statue of liberty', 'times square',
-      'rome', 'colosseum',
-      'barcelona', 'sagrada familia'
-    ];
-    
-    // Preload sequentially with 1.1s delay to respect Nominatim rate limit (1 req/sec)
-    let delay = 0;
-    popularLocations.forEach(location => {
-      setTimeout(() => {
-        fetch(`/api/landmarks/search?q=${encodeURIComponent(location)}`)
-          .catch(err => console.log('Preload error:', err));
-      }, delay);
-      delay += 1100; // 1.1 seconds between requests
-    });
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,11 +141,37 @@ export default function Dashboard() {
     return locations.filter(loc => loc.day === day);
   };
 
-  const getLocationImage = async (locationName: string): Promise<string> => {
-    // Use direct Unsplash images for popular landmarks
+  const fetchPlaceDetails = async (locationName: string, lat: number, lng: number) => {
+    setLoadingPlaceDetails(true);
+    try {
+      const response = await fetch(`/api/place-details?name=${encodeURIComponent(locationName)}&lat=${lat}&lng=${lng}`);
+      const data = await response.json();
+      setPlaceDetails(data);
+    } catch (error) {
+      console.error('Error fetching place details:', error);
+      setPlaceDetails(null);
+    } finally {
+      setLoadingPlaceDetails(false);
+    }
+  };
+
+  const getLocationImage = async (locationName: string, lat?: number, lng?: number): Promise<string> => {
+    // Try to fetch image from API first (with Unsplash integration)
+    if (lat && lng) {
+      try {
+        const response = await fetch(`/api/place-details?name=${encodeURIComponent(locationName)}&lat=${lat}&lng=${lng}`);
+        const data = await response.json();
+        if (data.image) {
+          return data.image;
+        }
+      } catch (error) {
+        console.error('Error fetching image from API:', error);
+      }
+    }
+    
+    // Fallback to hardcoded images for popular landmarks if API fails
     const landmarkImages: { [key: string]: string } = {
       'tokyo tower': 'https://images.unsplash.com/photo-1513407030348-c983a97b98d8?w=400&h=300&fit=crop',
-      'tokyo skytree': 'https://images.unsplash.com/photo-1551641506-ee5c4a2c4178?w=400&h=300&fit=crop',
       'tokyo': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&h=300&fit=crop',
       'eiffel tower': 'https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?w=400&h=300&fit=crop',
       'paris': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&h=300&fit=crop',
@@ -183,7 +193,7 @@ export default function Dashboard() {
       return landmarkImages[nameLower];
     }
     
-    // Fallback to Unsplash random image by location name
+    // Final fallback to generic image
     return `https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=300&fit=crop&q=80`;
   };
 
@@ -204,7 +214,7 @@ export default function Dashboard() {
       console.error('Error fetching coordinates:', error);
     }
     
-    const imageUrl = await getLocationImage(placeName);
+    const imageUrl = await getLocationImage(placeName, lat, lng);
     const newLocation: Location = {
       id: Date.now().toString(),
       name: placeName,
@@ -858,6 +868,7 @@ export default function Dashboard() {
                               value={daySubheadings[day] || ''}
                               onChange={(e) => setDaySubheadings({ ...daySubheadings, [day]: e.target.value })}
                               onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
                               placeholder="Add description..."
                               spellCheck={false}
                               className="block w-full mt-1 px-0 py-0.5 bg-transparent border-none text-white text-xs placeholder-white placeholder-opacity-60 focus:outline-none focus:text-white transition-all"
@@ -887,6 +898,8 @@ export default function Dashboard() {
                             type="text"
                             value={searchInput}
                             placeholder="Add a place..."
+                            spellCheck={false}
+                            autoComplete="off"
                             onChange={(e) => handleSearchChange(e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && searchInput.trim()) {
@@ -1113,6 +1126,19 @@ export default function Dashboard() {
                                         {location.notes || '+ Add note'}
                                       </button>
                                     )}
+                                    
+                                    <button
+                                      onClick={() => {
+                                        setShowMoreInfo(location.id);
+                                        fetchPlaceDetails(location.name, location.lat, location.lng);
+                                      }}
+                                      className="w-full mt-2 px-3 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-sm font-medium rounded-xl transition-all hover:scale-105 hover:shadow-lg flex items-center justify-center gap-2"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      More Info
+                                    </button>
                                   </div>
                                 </div>
 
@@ -1126,6 +1152,8 @@ export default function Dashboard() {
                                             type="text"
                                             value={insertSearchInput[`${day}-${index}`] || ''}
                                             placeholder="Search location..."
+                                            spellCheck={false}
+                                            autoComplete="off"
                                             className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-zinc-700 border-opacity-40 rounded-2xl text-white text-sm placeholder-white placeholder-opacity-60 focus:outline-none focus:border-orange-400 focus:bg-zinc-800 transition-all"
                                             onChange={(e) => handleInsertSearchChange(`${day}-${index}`, e.target.value)}
                                             onKeyDown={(e) => {
@@ -1183,11 +1211,15 @@ export default function Dashboard() {
                             ))}
 
                             <div className="relative mt-3 mb-2">
-                              <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white text-opacity-60 z-10">@</span>
+                              <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white text-opacity-60 z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
                               <input
                                 type="text"
                                 value={bottomSearchInput[day] || ''}
                                 placeholder="Add another place..."
+                                spellCheck={false}
+                                autoComplete="off"
                                 onChange={(e) => handleBottomSearchChange(day, e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' && bottomSearchInput[day] && bottomSearchInput[day].trim()) {
@@ -1260,6 +1292,141 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* More Info Modal */}
+      {showMoreInfo && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowMoreInfo(null)}
+        >
+          <div 
+            className="bg-zinc-900 rounded-3xl max-w-2xl w-full max-h-[80vh] overflow-y-auto border border-zinc-700 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {loadingPlaceDetails ? (
+              <div className="p-8 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
+              </div>
+            ) : placeDetails ? (
+              <div>
+                {placeDetails.image && (
+                  <div className="relative h-64 w-full">
+                    <img
+                      src={placeDetails.image}
+                      alt={placeDetails.name}
+                      className="w-full h-full object-cover rounded-t-3xl"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                    <button
+                      onClick={() => setShowMoreInfo(null)}
+                      className="absolute top-4 right-4 w-10 h-10 bg-black bg-opacity-60 hover:bg-opacity-80 backdrop-blur-xl rounded-full flex items-center justify-center transition-all border border-white border-opacity-20"
+                    >
+                      <span className="text-white text-xl">×</span>
+                    </button>
+                  </div>
+                )}
+                
+                <div className="p-6">
+                  <h2 className="text-2xl font-bold text-white mb-4">{placeDetails.name}</h2>
+                  
+                  {placeDetails.rating && (
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => (
+                          <svg
+                            key={i}
+                            className={`w-5 h-5 ${i < Math.floor(placeDetails.rating) ? 'text-yellow-400' : 'text-gray-600'}`}
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        ))}
+                      </div>
+                      <span className="text-white font-semibold">{placeDetails.rating.toFixed(1)}</span>
+                    </div>
+                  )}
+                  
+                  {placeDetails.description && (
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold text-white mb-2">Description</h3>
+                      <p className="text-stone-300 text-sm leading-relaxed">{placeDetails.description}</p>
+                    </div>
+                  )}
+                  
+                  {placeDetails.openingHours && (
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold text-white mb-2">Opening Hours</h3>
+                      <p className="text-stone-300 text-sm">{placeDetails.openingHours}</p>
+                    </div>
+                  )}
+                  
+                  {(placeDetails.website || placeDetails.phone) && (
+                    <div className="mb-4 space-y-2">
+                      {placeDetails.website && (
+                        <a
+                          href={placeDetails.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-orange-400 hover:text-orange-300 text-sm"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                          </svg>
+                          Visit Website
+                        </a>
+                      )}
+                      {placeDetails.phone && (
+                        <p className="text-stone-300 text-sm flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          {placeDetails.phone}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {placeDetails.reviews && placeDetails.reviews.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-white mb-3">Reviews</h3>
+                      <div className="space-y-3">
+                        {placeDetails.reviews.map((review: any, index: number) => (
+                          <div key={index} className="bg-zinc-800 bg-opacity-50 rounded-xl p-4 border border-zinc-700 border-opacity-40">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-white font-medium">{review.author}</span>
+                              <div className="flex items-center gap-1">
+                                {[...Array(5)].map((_, i) => (
+                                  <svg
+                                    key={i}
+                                    className={`w-4 h-4 ${i < review.rating ? 'text-yellow-400' : 'text-gray-600'}`}
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                  >
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                  </svg>
+                                ))}
+                              </div>
+                            </div>
+                            <p className="text-stone-300 text-sm leading-relaxed">{review.text}</p>
+                            {review.date && (
+                              <p className="text-stone-500 text-xs mt-2">{review.date}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-stone-400">
+                Failed to load place details
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
