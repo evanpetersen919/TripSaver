@@ -79,6 +79,8 @@ export default function MapComponent({ landmarks, selectedLandmark }: MapCompone
     <MapContainer
       center={center}
       zoom={12}
+      minZoom={3}
+      maxZoom={18}
       style={{ height: '100%', width: '100%' }}
       zoomControl={false}
       scrollWheelZoom={true}

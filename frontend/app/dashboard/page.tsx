@@ -1,11 +1,11 @@
 "use client";
 
 import React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import SearchSuggestions from "@/components/SearchSuggestions";
+import ModernSearchSuggestions from "@/components/ModernSearchSuggestions";
 
 const MapComponent = dynamic(() => import("@/components/MapComponent"), {
   ssr: false,
@@ -54,6 +54,16 @@ export default function Dashboard() {
   const [bottomSearchInput, setBottomSearchInput] = useState<{ [key: number]: string }>({});
   const [bottomSearchSuggestions, setBottomSearchSuggestions] = useState<{ [key: number]: string[] }>({});
   const [showBottomSuggestions, setShowBottomSuggestions] = useState<{ [key: number]: boolean }>({});
+  const [destinationInput, setDestinationInput] = useState('');
+  const [destinationSuggestions, setDestinationSuggestions] = useState<string[]>([]);
+  const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
+  const [isEditingDestination, setIsEditingDestination] = useState(false);
+  
+  // Debounce timers
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const bottomSearchDebounceRef = useRef<{ [key: number]: NodeJS.Timeout }>({});
+  const insertSearchDebounceRef = useRef<{ [key: string]: NodeJS.Timeout }>({});
+  const destinationDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -91,6 +101,26 @@ export default function Dashboard() {
         setDestinationImage(destinationImages[destLower]);
       }
     }
+
+    // Preload popular locations and landmarks to warm up cache
+    const popularLocations = [
+      'tokyo', 'tokyo tower', 'tokyo skytree',
+      'paris', 'eiffel tower', 'louvre',
+      'london', 'big ben', 'london eye',
+      'new york', 'statue of liberty', 'times square',
+      'rome', 'colosseum',
+      'barcelona', 'sagrada familia'
+    ];
+    
+    // Preload sequentially with 1.1s delay to respect Nominatim rate limit (1 req/sec)
+    let delay = 0;
+    popularLocations.forEach(location => {
+      setTimeout(() => {
+        fetch(`/api/landmarks/search?q=${encodeURIComponent(location)}`)
+          .catch(err => console.log('Preload error:', err));
+      }, delay);
+      delay += 1100; // 1.1 seconds between requests
+    });
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,9 +157,34 @@ export default function Dashboard() {
     return locations.filter(loc => loc.day === day);
   };
 
-  const getLocationImage = (locationName: string): string => {
-    const timestamp = Date.now();
-    return 'https://source.unsplash.com/400x300/?' + encodeURIComponent(locationName) + '&' + timestamp;
+  const getLocationImage = async (locationName: string): Promise<string> => {
+    // Use direct Unsplash images for popular landmarks
+    const landmarkImages: { [key: string]: string } = {
+      'tokyo tower': 'https://images.unsplash.com/photo-1513407030348-c983a97b98d8?w=400&h=300&fit=crop',
+      'tokyo skytree': 'https://images.unsplash.com/photo-1551641506-ee5c4a2c4178?w=400&h=300&fit=crop',
+      'tokyo': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&h=300&fit=crop',
+      'eiffel tower': 'https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?w=400&h=300&fit=crop',
+      'paris': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&h=300&fit=crop',
+      'louvre': 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=400&h=300&fit=crop',
+      'london': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=400&h=300&fit=crop',
+      'big ben': 'https://images.unsplash.com/photo-1505761671935-60b3a7427bad?w=400&h=300&fit=crop',
+      'london eye': 'https://images.unsplash.com/photo-1568849676085-51415703900f?w=400&h=300&fit=crop',
+      'statue of liberty': 'https://images.unsplash.com/photo-1485738422979-f5c462d49f74?w=400&h=300&fit=crop',
+      'new york': 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&h=300&fit=crop',
+      'times square': 'https://images.unsplash.com/photo-1560086375-d9cb2274f2a4?w=400&h=300&fit=crop',
+      'colosseum': 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&h=300&fit=crop',
+      'rome': 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&h=300&fit=crop',
+      'barcelona': 'https://images.unsplash.com/photo-1562883676-8c7feb83f09b?w=400&h=300&fit=crop',
+      'sagrada familia': 'https://images.unsplash.com/photo-1523531294919-4bcd7c65e216?w=400&h=300&fit=crop',
+    };
+    
+    const nameLower = locationName.toLowerCase();
+    if (landmarkImages[nameLower]) {
+      return landmarkImages[nameLower];
+    }
+    
+    // Fallback to Unsplash random image by location name
+    return `https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=300&fit=crop&q=80`;
   };
 
   const handleAddPlace = async (day: number, placeName: string, insertAfterIndex?: number) => {
@@ -149,7 +204,7 @@ export default function Dashboard() {
       console.error('Error fetching coordinates:', error);
     }
     
-    const imageUrl = getLocationImage(placeName);
+    const imageUrl = await getLocationImage(placeName);
     const newLocation: Location = {
       id: Date.now().toString(),
       name: placeName,
@@ -220,14 +275,17 @@ export default function Dashboard() {
   const handleFindLocations = async (day: number) => {
     setLoadingRecommendations(true);
     
-    setTimeout(() => {
+    setTimeout(async () => {
+      const image1 = await getLocationImage('Senso-ji Temple Tokyo');
+      const image2 = await getLocationImage('Meiji Shrine Tokyo');
+      
       const mockLocations: Location[] = [
         {
           id: Date.now().toString() + '-1',
           name: 'Senso-ji Temple',
           lat: 35.7148,
           lng: 139.7967,
-          image: getLocationImage('Senso-ji Temple Tokyo'),
+          image: image1,
           day: day,
         },
         {
@@ -235,7 +293,7 @@ export default function Dashboard() {
           name: 'Meiji Shrine',
           lat: 35.6764,
           lng: 139.6993,
-          image: getLocationImage('Meiji Shrine Tokyo'),
+          image: image2,
           day: day,
         },
       ];
@@ -250,63 +308,399 @@ export default function Dashboard() {
     ));
   };
 
-  const handleSearchChange = async (value: string) => {
+  const handleSearchChange = (value: string) => {
     setSearchInput(value);
+    
+    // Clear previous debounce
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    
     if (value.trim().length > 1) {
-      try {
-        const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value));
-        const data = await response.json();
-        const suggestions = data.landmarks.map((l: any) => l.name);
-        setSearchSuggestions(suggestions.slice(0, 8));
-        setShowSuggestions(suggestions.length !== 0);
-      } catch (error) {
-        console.error('Error searching landmarks:', error);
-        setShowSuggestions(false);
-      }
+      // Debounce API call by 300ms
+      searchDebounceRef.current = setTimeout(async () => {
+        try {
+          const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
+          const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
+          const data = await response.json();
+          
+          // Prioritize popular landmarks and query relevance
+          const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
+          const queryLower = value.toLowerCase();
+          
+          // Inject popular landmarks that match the query but might not be in API results
+          const matchingPopular = popularLandmarks.filter(landmark => {
+            const words = landmark.split(' ');
+            return words.some(word => word.startsWith(queryLower)) || landmark.includes(queryLower);
+          });
+          
+          // Add matching popular landmarks to results if not already present
+          const existingNames = new Set(data.landmarks.map((l: any) => l.name.toLowerCase()));
+          matchingPopular.forEach(landmark => {
+            if (!existingNames.has(landmark)) {
+              data.landmarks.unshift({ name: landmark.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), latitude: 0, longitude: 0 });
+            }
+          });
+          
+          // Filter out results that match popular landmarks from other countries when destination is set
+          let filteredLandmarks = data.landmarks;
+          if (destination) {
+            const destLower = destination.toLowerCase();
+            const countryLandmarks: { [key: string]: string[] } = {
+              'japan': ['tokyo tower', 'tokyo skytree'],
+              'france': ['eiffel tower', 'louvre'],
+              'united kingdom': ['big ben', 'london eye'],
+              'uk': ['big ben', 'london eye'],
+              'london': ['big ben', 'london eye'],
+              'united states': ['statue of liberty', 'times square'],
+              'usa': ['statue of liberty', 'times square'],
+              'new york': ['statue of liberty', 'times square'],
+              'italy': ['colosseum'],
+              'rome': ['colosseum'],
+              'spain': ['sagrada familia'],
+              'barcelona': ['sagrada familia']
+            };
+            
+            const allowedLandmarks = countryLandmarks[destLower] || [];
+            filteredLandmarks = data.landmarks.filter((l: any) => {
+              const nameLower = l.name.toLowerCase();
+              // Keep if not a popular landmark, or if it matches the destination country
+              const isPopularLandmark = popularLandmarks.some(p => nameLower.includes(p) || p.includes(nameLower));
+              if (!isPopularLandmark) return true;
+              return allowedLandmarks.some(allowed => nameLower.includes(allowed) || allowed.includes(nameLower));
+            });
+          }
+          
+          const suggestions = filteredLandmarks
+            .sort((a: any, b: any) => {
+              const aLower = a.name.toLowerCase();
+              const bLower = b.name.toLowerCase();
+              
+              // Check if name starts with query (highest priority)
+              const aStarts = aLower.startsWith(queryLower);
+              const bStarts = bLower.startsWith(queryLower);
+              if (aStarts && !bStarts) return -1;
+              if (!aStarts && bStarts) return 1;
+              
+              // Check if it's a popular landmark
+              const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
+              const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
+              if (aPopular && !bPopular) return -1;
+              if (!aPopular && bPopular) return 1;
+              
+              return 0;
+            })
+            .map((l: any) => l.name);
+          setSearchSuggestions(suggestions.slice(0, 3));
+          setShowSuggestions(suggestions.length !== 0);
+        } catch (error) {
+          console.error('Error searching landmarks:', error);
+          setShowSuggestions(false);
+        }
+      }, 300);
     } else {
       setShowSuggestions(false);
     }
   };
 
-  const handleBottomSearchChange = async (day: number, value: string) => {
+  const handleBottomSearchChange = (day: number, value: string) => {
     setBottomSearchInput({ ...bottomSearchInput, [day]: value });
+    
+    // Clear previous debounce for this day
+    if (bottomSearchDebounceRef.current[day]) {
+      clearTimeout(bottomSearchDebounceRef.current[day]);
+    }
+    
     if (value.trim().length > 1) {
-      try {
-        const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value));
-        const data = await response.json();
-        const suggestions = data.landmarks.map((l: any) => l.name);
-        setBottomSearchSuggestions({ ...bottomSearchSuggestions, [day]: suggestions.slice(0, 8) });
-        setShowBottomSuggestions({ ...showBottomSuggestions, [day]: suggestions.length !== 0 });
-      } catch (error) {
-        console.error('Error searching landmarks:', error);
-        setShowBottomSuggestions({ ...showBottomSuggestions, [day]: false });
-      }
+      // Debounce API call by 300ms
+      bottomSearchDebounceRef.current[day] = setTimeout(async () => {
+        try {
+          const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
+          const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
+          const data = await response.json();
+          
+          // Prioritize popular landmarks and query relevance
+          const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
+          const queryLower = value.toLowerCase();
+          
+          // Only inject popular landmarks if no destination filter (to avoid showing wrong country landmarks)
+          if (!destination) {
+            // Inject popular landmarks that match the query but might not be in API results
+            const matchingPopular = popularLandmarks.filter(landmark => {
+              const words = landmark.split(' ');
+              return words.some(word => word.startsWith(queryLower)) || landmark.includes(queryLower);
+            });
+            
+            // Add matching popular landmarks to results if not already present
+            const existingNames = new Set(data.landmarks.map((l: any) => l.name.toLowerCase()));
+            matchingPopular.forEach(landmark => {
+              if (!existingNames.has(landmark)) {
+                data.landmarks.unshift({ name: landmark.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), latitude: 0, longitude: 0 });
+              }
+            });
+          }
+          
+          // Filter out results that match popular landmarks from other countries when destination is set
+          let filteredLandmarks = data.landmarks;
+          if (destination) {
+            const destLower = destination.toLowerCase();
+            const countryLandmarks: { [key: string]: string[] } = {
+              'japan': ['tokyo tower', 'tokyo skytree'],
+              'france': ['eiffel tower', 'louvre'],
+              'united kingdom': ['big ben', 'london eye'],
+              'uk': ['big ben', 'london eye'],
+              'london': ['big ben', 'london eye'],
+              'united states': ['statue of liberty', 'times square'],
+              'usa': ['statue of liberty', 'times square'],
+              'new york': ['statue of liberty', 'times square'],
+              'italy': ['colosseum'],
+              'rome': ['colosseum'],
+              'spain': ['sagrada familia'],
+              'barcelona': ['sagrada familia']
+            };
+            
+            const allowedLandmarks = countryLandmarks[destLower] || [];
+            filteredLandmarks = data.landmarks.filter((l: any) => {
+              const nameLower = l.name.toLowerCase();
+              // Keep if not a popular landmark, or if it matches the destination country
+              const isPopularLandmark = popularLandmarks.some(p => nameLower.includes(p) || p.includes(nameLower));
+              if (!isPopularLandmark) return true;
+              return allowedLandmarks.some(allowed => nameLower.includes(allowed) || allowed.includes(nameLower));
+            });
+          }
+          
+          const suggestions = filteredLandmarks
+            .sort((a: any, b: any) => {
+              const aLower = a.name.toLowerCase();
+              const bLower = b.name.toLowerCase();
+              
+              // Check if name starts with query (highest priority)
+              const aStarts = aLower.startsWith(queryLower);
+              const bStarts = bLower.startsWith(queryLower);
+              if (aStarts && !bStarts) return -1;
+              if (!aStarts && bStarts) return 1;
+              
+              // Check if any word in the name starts with query
+              const aWordStarts = aLower.split(' ').some((word: string) => word.startsWith(queryLower));
+              const bWordStarts = bLower.split(' ').some((word: string) => word.startsWith(queryLower));
+              if (aWordStarts && !bWordStarts) return -1;
+              if (!aWordStarts && bWordStarts) return 1;
+              
+              // Check if it's a popular landmark
+              const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
+              const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
+              if (aPopular && !bPopular) return -1;
+              if (!aPopular && bPopular) return 1;
+              
+              return 0;
+            })
+            .map((l: any) => l.name);
+          setBottomSearchSuggestions({ ...bottomSearchSuggestions, [day]: suggestions.slice(0, 3) });
+          setShowBottomSuggestions({ ...showBottomSuggestions, [day]: suggestions.length !== 0 });
+        } catch (error) {
+          console.error('Error searching landmarks:', error);
+          setShowBottomSuggestions({ ...showBottomSuggestions, [day]: false });
+        }
+      }, 300);
     } else {
       setShowBottomSuggestions({ ...showBottomSuggestions, [day]: false });
     }
   };
 
-  const handleInsertSearchChange = async (key: string, value: string) => {
+  const handleInsertSearchChange = (key: string, value: string) => {
     setInsertSearchInput({ ...insertSearchInput, [key]: value });
+    
+    // Clear previous debounce for this insert position
+    if (insertSearchDebounceRef.current[key]) {
+      clearTimeout(insertSearchDebounceRef.current[key]);
+    }
+    
     if (value.trim().length > 1) {
-      try {
-        const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value));
-        const data = await response.json();
-        const suggestions = data.landmarks.map((l: any) => l.name);
-        setInsertSearchSuggestions({ ...insertSearchSuggestions, [key]: suggestions.slice(0, 8) });
-        setShowInsertSuggestions({ ...showInsertSuggestions, [key]: suggestions.length !== 0 });
-      } catch (error) {
-        console.error('Error searching landmarks:', error);
-        setShowInsertSuggestions({ ...showInsertSuggestions, [key]: false });
-      }
+      // Debounce API call by 300ms
+      insertSearchDebounceRef.current[key] = setTimeout(async () => {
+        try {
+          const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
+          const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
+          const data = await response.json();
+          
+          // Prioritize popular landmarks and query relevance
+          const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
+          const queryLower = value.toLowerCase();
+          
+          // Only inject popular landmarks if no destination filter (to avoid showing wrong country landmarks)
+          if (!destination) {
+            // Inject popular landmarks that match the query but might not be in API results
+            const matchingPopular = popularLandmarks.filter(landmark => {
+              const words = landmark.split(' ');
+              return words.some(word => word.startsWith(queryLower)) || landmark.includes(queryLower);
+            });
+            
+            // Add matching popular landmarks to results if not already present
+            const existingNames = new Set(data.landmarks.map((l: any) => l.name.toLowerCase()));
+            matchingPopular.forEach(landmark => {
+              if (!existingNames.has(landmark)) {
+                data.landmarks.unshift({ name: landmark.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), latitude: 0, longitude: 0 });
+              }
+            });
+          }
+          
+          // Filter out results that match popular landmarks from other countries when destination is set
+          let filteredLandmarks = data.landmarks;
+          if (destination) {
+            const destLower = destination.toLowerCase();
+            const countryLandmarks: { [key: string]: string[] } = {
+              'japan': ['tokyo tower', 'tokyo skytree'],
+              'france': ['eiffel tower', 'louvre'],
+              'united kingdom': ['big ben', 'london eye'],
+              'uk': ['big ben', 'london eye'],
+              'london': ['big ben', 'london eye'],
+              'united states': ['statue of liberty', 'times square'],
+              'usa': ['statue of liberty', 'times square'],
+              'new york': ['statue of liberty', 'times square'],
+              'italy': ['colosseum'],
+              'rome': ['colosseum'],
+              'spain': ['sagrada familia'],
+              'barcelona': ['sagrada familia']
+            };
+            
+            const allowedLandmarks = countryLandmarks[destLower] || [];
+            filteredLandmarks = data.landmarks.filter((l: any) => {
+              const nameLower = l.name.toLowerCase();
+              // Keep if not a popular landmark, or if it matches the destination country
+              const isPopularLandmark = popularLandmarks.some(p => nameLower.includes(p) || p.includes(nameLower));
+              if (!isPopularLandmark) return true;
+              return allowedLandmarks.some(allowed => nameLower.includes(allowed) || allowed.includes(nameLower));
+            });
+          }
+          
+          const suggestions = filteredLandmarks
+            .sort((a: any, b: any) => {
+              const aLower = a.name.toLowerCase();
+              const bLower = b.name.toLowerCase();
+              
+              // Check if name starts with query (highest priority)
+              const aStarts = aLower.startsWith(queryLower);
+              const bStarts = bLower.startsWith(queryLower);
+              if (aStarts && !bStarts) return -1;
+              if (!aStarts && bStarts) return 1;
+              
+              // Check if any word in the name starts with query
+              const aWordStarts = aLower.split(' ').some((word: string) => word.startsWith(queryLower));
+              const bWordStarts = bLower.split(' ').some((word: string) => word.startsWith(queryLower));
+              if (aWordStarts && !bWordStarts) return -1;
+              if (!aWordStarts && bWordStarts) return 1;
+              
+              // Check if it's a popular landmark
+              const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
+              const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
+              if (aPopular && !bPopular) return -1;
+              if (!aPopular && bPopular) return 1;
+              
+              return 0;
+            })
+            .map((l: any) => l.name);
+          setInsertSearchSuggestions({ ...insertSearchSuggestions, [key]: suggestions.slice(0, 3) });
+          setShowInsertSuggestions({ ...showInsertSuggestions, [key]: suggestions.length !== 0 });
+        } catch (error) {
+          console.error('Error searching landmarks:', error);
+          setShowInsertSuggestions({ ...showInsertSuggestions, [key]: false });
+        }
+      }, 300);
     } else {
       setShowInsertSuggestions({ ...showInsertSuggestions, [key]: false });
     }
   };
 
+  const handleDestinationSearchChange = (value: string) => {
+    setDestinationInput(value);
+    
+    if (destinationDebounceRef.current) {
+      clearTimeout(destinationDebounceRef.current);
+    }
+    
+    if (value.trim().length > 1) {
+      destinationDebounceRef.current = setTimeout(async () => {
+        try {
+          const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value));
+          const data = await response.json();
+          // Filter to only show large locations (countries, states, regions) - NO cities or smaller
+          const suggestions = data.landmarks
+            .filter((l: any) => {
+              const addresstype = (l.addresstype || '').toLowerCase();
+              const type = (l.type || '').toLowerCase();
+              
+              // Only allow: country, state, region (administrative level 2-4)
+              const isLargeLocation = addresstype === 'country' || 
+                                     addresstype === 'state' || 
+                                     addresstype === 'region' ||
+                                     type === 'administrative';
+              
+              // Exclude cities, towns, villages, and smaller
+              const isSmallLocation = addresstype === 'city' || 
+                                     addresstype === 'town' || 
+                                     addresstype === 'village' ||
+                                     addresstype === 'municipality' ||
+                                     addresstype === 'county' ||
+                                     type === 'city';
+              
+              return isLargeLocation && !isSmallLocation;
+            })
+            .map((l: any) => l.name);
+          setDestinationSuggestions(suggestions.slice(0, 3));
+          setShowDestinationSuggestions(suggestions.length !== 0);
+        } catch (error) {
+          console.error('Error searching destinations:', error);
+          setShowDestinationSuggestions(false);
+        }
+      }, 300);
+    } else {
+      setShowDestinationSuggestions(false);
+    }
+  };
+
+  const handleSelectDestination = async (dest: string) => {
+    setDestination(dest);
+    setDestinationInput('');
+    setShowDestinationSuggestions(false);
+    setIsEditingDestination(false);
+    
+    // Fetch coordinates for the destination
+    try {
+      const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(dest));
+      const data = await response.json();
+      if (data.landmarks && data.landmarks.length > 0) {
+        const location = data.landmarks[0];
+        setDestinationLat(location.latitude);
+        setDestinationLng(location.longitude);
+      }
+    } catch (error) {
+      console.error('Error fetching destination coordinates:', error);
+    }
+    
+    // Update destination image
+    const destinationImages: { [key: string]: string } = {
+      'japan': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
+      'france': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
+      'italy': 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&q=80',
+      'spain': 'https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=800&q=80',
+      'united kingdom': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80',
+      'greece': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800&q=80',
+      'thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&q=80',
+      'australia': 'https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=800&q=80',
+      'california': 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80',
+      'hawaii': 'https://images.unsplash.com/photo-1542259009477-d625272157b7?w=800&q=80',
+      'iceland': 'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&q=80',
+      'new zealand': 'https://images.unsplash.com/photo-1507699622108-4be3abd695ad?w=800&q=80',
+    };
+    const destLower = dest.toLowerCase();
+    if (destinationImages[destLower]) {
+      setDestinationImage(destinationImages[destLower]);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-900 via-stone-900 to-zinc-900 flex flex-col">
-      <div className="bg-zinc-900 bg-opacity-50 backdrop-blur-md border-b border-stone-700 border-opacity-20 px-6 py-3">
+      <div className="relative z-[2000] bg-zinc-900 bg-opacity-70 backdrop-blur-2xl border-b border-zinc-800 border-opacity-50 px-8 py-4 shadow-2xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={() => router.push('/')} className="text-stone-400 hover:text-stone-300 transition-colors">
@@ -325,8 +719,51 @@ export default function Dashboard() {
               onChange={(e) => setTripName(e.target.value)}
               placeholder="Trip Name"
               spellCheck={false}
-              className="text-base font-medium text-stone-100 bg-transparent border-none outline-none focus:text-orange-400 transition-colors placeholder-stone-600"
+              className="text-lg font-semibold text-white bg-transparent border-none outline-none focus:text-orange-400 transition-colors placeholder-stone-600"
             />
+            <div className="h-5 w-px bg-stone-700 bg-opacity-30"></div>
+            {!isEditingDestination ? (
+              <button
+                onClick={() => {
+                  setIsEditingDestination(true);
+                  setDestinationInput(destination);
+                }}
+                className="text-sm text-stone-400 hover:text-orange-400 transition-colors"
+              >
+                {destination || 'Add destination'}
+              </button>
+            ) : (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={destinationInput}
+                  onChange={(e) => handleDestinationSearchChange(e.target.value)}
+                  onFocus={() => {
+                    if (destinationInput.trim().length > 1) {
+                      handleDestinationSearchChange(destinationInput);
+                    }
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      setIsEditingDestination(false);
+                      setShowDestinationSuggestions(false);
+                    }, 200);
+                  }}
+                  placeholder="Type destination..."
+                  autoFocus
+                  spellCheck={false}
+                  className="text-sm text-white bg-zinc-800 border border-zinc-700 rounded px-2 py-1 focus:outline-none focus:border-orange-400 min-w-[150px] placeholder-white placeholder-opacity-60"
+                />
+                {showDestinationSuggestions && destinationSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1 z-[10001]">
+                    <ModernSearchSuggestions
+                      suggestions={destinationSuggestions}
+                      onSelect={handleSelectDestination}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             <div className="h-5 w-px bg-stone-700 bg-opacity-30"></div>
             {isEditingDates ? (
               <div className="flex items-center gap-2">
@@ -334,14 +771,14 @@ export default function Dashboard() {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="text-xs bg-transparent border-b border-stone-700 border-opacity-30 text-stone-300 focus:outline-none focus:border-orange-400"
+                  className="text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white focus:outline-none focus:border-orange-400 [color-scheme:dark]"
                 />
                 <span className="text-stone-500 text-xs">-</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="text-xs bg-transparent border-b border-stone-700 border-opacity-30 text-stone-300 focus:outline-none focus:border-orange-400"
+                  className="text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white focus:outline-none focus:border-orange-400 [color-scheme:dark]"
                 />
                 <button
                   onClick={() => setIsEditingDates(false)}
@@ -353,7 +790,7 @@ export default function Dashboard() {
             ) : (
               <button
                 onClick={() => setIsEditingDates(true)}
-                className="text-sm text-stone-300 hover:text-orange-400 transition-colors"
+                className="text-sm text-white hover:text-orange-400 transition-colors"
               >
                 {startDate && endDate ? `${startDate} - ${endDate}` : 'Add dates'}
               </button>
@@ -370,14 +807,15 @@ export default function Dashboard() {
           <MapComponent landmarks={locations} selectedLandmark={selectedLocation} />
         </div>
 
-        <div className="absolute top-4 left-4 bottom-4 w-96 min-w-[384px] bg-zinc-900 bg-opacity-90 backdrop-blur-xl border border-stone-700 border-opacity-30 flex flex-col shadow-2xl rounded-2xl overflow-hidden z-[1000]">
+        <div className="absolute top-5 left-5 bottom-5 w-96 min-w-[384px] bg-zinc-900 bg-opacity-95 backdrop-blur-3xl border border-zinc-800 border-opacity-50 flex flex-col shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] rounded-3xl z-[1000]" style={{overflow: 'visible'}}>
           {(destination || tripName) && (
-            <div className="relative h-40 border-b border-stone-700 border-opacity-30 overflow-hidden">
+            <div className="relative h-48 border-b border-zinc-800 border-opacity-50 overflow-hidden rounded-t-3xl">
               {destinationImage ? (
                 <div className="absolute inset-0 w-full h-full">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img 
                     src={destinationImage} 
-                    alt={destination}
+                    alt={destination || 'Trip destination'}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
@@ -385,10 +823,10 @@ export default function Dashboard() {
               ) : (
                 <div className="absolute inset-0 bg-gradient-to-br from-orange-900/20 to-purple-900/20"></div>
               )}
-              <div className="absolute bottom-3 left-4 right-4">
-                <h1 className="text-xl font-bold text-white mb-0.5 drop-shadow-lg">{tripName}</h1>
+              <div className="absolute bottom-4 left-5 right-5">
+                <h1 className="text-2xl font-bold text-white mb-1 drop-shadow-2xl tracking-tight">{tripName}</h1>
                 {destination && (
-                  <p className="text-sm text-stone-300 drop-shadow">{destination}</p>
+                  <p className="text-sm text-white text-opacity-90 drop-shadow-lg font-medium">{destination}</p>
                 )}
               </div>
             </div>
@@ -400,41 +838,51 @@ export default function Dashboard() {
               const isExpanded = currentDay === day;
               
               return (
-                <div key={day} className="mb-3 mx-3 first:mt-3">
-                  <div className="bg-zinc-800 bg-opacity-50 backdrop-blur-xl rounded-2xl border border-stone-700 border-opacity-20 overflow-hidden shadow-2xl">
+                <div key={day} className="mb-4 mx-4 first:mt-4 relative">
+                  <div className="bg-zinc-800 bg-opacity-60 backdrop-blur-2xl rounded-3xl border border-zinc-700 border-opacity-40 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.3)]">
                     <button
                       onClick={() => setCurrentDay(isExpanded ? 0 : day)}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800 hover:bg-opacity-30 transition-all"
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-700 hover:bg-opacity-20 transition-all duration-200"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-orange-500 bg-opacity-20 flex items-center justify-center text-orange-400 text-sm font-semibold">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white text-sm font-bold shadow-lg flex-shrink-0">
                           {day}
                         </div>
-                        <span className="text-white text-base font-medium">Day {day}</span>
-                        {dayLocations.length !== 0 && (
-                          <span className="text-sm text-stone-400">({dayLocations.length})</span>
-                        )}
+                        <div className="flex-1 min-w-0 text-left">
+                          <div>
+                            <span className="text-white text-base font-medium">Day {day}</span>
+                          </div>
+                          {isExpanded ? (
+                            <input
+                              type="text"
+                              value={daySubheadings[day] || ''}
+                              onChange={(e) => setDaySubheadings({ ...daySubheadings, [day]: e.target.value })}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Add description..."
+                              spellCheck={false}
+                              className="block w-full mt-1 px-0 py-0.5 bg-transparent border-none text-white text-xs placeholder-white placeholder-opacity-60 focus:outline-none focus:text-white transition-all"
+                            />
+                          ) : (
+                            daySubheadings[day] && (
+                              <p className="text-white text-opacity-60 text-xs mt-1 truncate">{daySubheadings[day]}</p>
+                            )
+                          )}
+                        </div>
                       </div>
                       <span
-                        className={'text-stone-500 transition-transform inline-block ' + (isExpanded ? 'rotate-180' : '')}
+                        className={'text-stone-500 transition-transform inline-block flex-shrink-0 ml-2 ' + (isExpanded ? 'rotate-180' : '')}
                       >
                         v
                       </span>
                     </button>
 
                     {isExpanded && (
-                      <div className="bg-black bg-opacity-20 px-4 py-3">
-                        <input
-                          type="text"
-                          value={daySubheadings[day] || ''}
-                          onChange={(e) => setDaySubheadings({ ...daySubheadings, [day]: e.target.value })}
-                          placeholder="Add description for this day..."
-                          spellCheck={false}
-                          className="w-full px-3 py-2 mb-3 bg-transparent border-b border-stone-700 border-opacity-30 text-white text-sm placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-50 transition-colors"
-                        />
+                      <div className="px-5 py-4">
 
                         <div className="relative mb-3">
-                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-stone-500 z-10">@</span>
+                          <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white text-opacity-60 z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
                           <input
                             type="text"
                             value={searchInput}
@@ -447,16 +895,101 @@ export default function Dashboard() {
                                 setShowSuggestions(false);
                               }
                             }}
-                            onFocus={() => {
-                              if (searchInput.trim()) {
-                                setShowSuggestions(searchSuggestions.length !== 0);
+                            onFocus={async () => {
+                              if (searchInput.trim().length > 1) {
+                                try {
+                                  const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
+                                  const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(searchInput) + countryParam);
+                                  const data = await response.json();
+                                  
+                                  // Prioritize popular landmarks and query relevance
+                                  const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
+                                  const queryLower = searchInput.toLowerCase();
+                                  
+                                  // Only inject popular landmarks if no destination filter (to avoid showing wrong country landmarks)
+                                  if (!destination) {
+                                    // Inject popular landmarks that match the query but might not be in API results
+                                    const matchingPopular = popularLandmarks.filter(landmark => {
+                                      const words = landmark.split(' ');
+                                      return words.some(word => word.startsWith(queryLower)) || landmark.includes(queryLower);
+                                    });
+                                    
+                                    // Add matching popular landmarks to results if not already present
+                                    const existingNames = new Set(data.landmarks.map((l: any) => l.name.toLowerCase()));
+                                    matchingPopular.forEach(landmark => {
+                                      if (!existingNames.has(landmark)) {
+                                        data.landmarks.unshift({ name: landmark.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), latitude: 0, longitude: 0 });
+                                      }
+                                    });
+                                  }
+                                  
+                                  // Filter out results that match popular landmarks from other countries when destination is set
+                                  let filteredLandmarks = data.landmarks;
+                                  if (destination) {
+                                    const destLower = destination.toLowerCase();
+                                    const countryLandmarks: { [key: string]: string[] } = {
+                                      'japan': ['tokyo tower', 'tokyo skytree'],
+                                      'france': ['eiffel tower', 'louvre'],
+                                      'united kingdom': ['big ben', 'london eye'],
+                                      'uk': ['big ben', 'london eye'],
+                                      'london': ['big ben', 'london eye'],
+                                      'united states': ['statue of liberty', 'times square'],
+                                      'usa': ['statue of liberty', 'times square'],
+                                      'new york': ['statue of liberty', 'times square'],
+                                      'italy': ['colosseum'],
+                                      'rome': ['colosseum'],
+                                      'spain': ['sagrada familia'],
+                                      'barcelona': ['sagrada familia']
+                                    };
+                                    
+                                    const allowedLandmarks = countryLandmarks[destLower] || [];
+                                    filteredLandmarks = data.landmarks.filter((l: any) => {
+                                      const nameLower = l.name.toLowerCase();
+                                      // Keep if not a popular landmark, or if it matches the destination country
+                                      const isPopularLandmark = popularLandmarks.some(p => nameLower.includes(p) || p.includes(nameLower));
+                                      if (!isPopularLandmark) return true;
+                                      return allowedLandmarks.some(allowed => nameLower.includes(allowed) || allowed.includes(nameLower));
+                                    });
+                                  }
+                                  
+                                  const suggestions = filteredLandmarks
+                                    .sort((a: any, b: any) => {
+                                      const aLower = a.name.toLowerCase();
+                                      const bLower = b.name.toLowerCase();
+                                      
+                                      // Check if name starts with query (highest priority)
+                                      const aStarts = aLower.startsWith(queryLower);
+                                      const bStarts = bLower.startsWith(queryLower);
+                                      if (aStarts && !bStarts) return -1;
+                                      if (!aStarts && bStarts) return 1;
+                                      
+                                      // Check if any word in the name starts with query
+                                      const aWordStarts = aLower.split(' ').some((word: string) => word.startsWith(queryLower));
+                                      const bWordStarts = bLower.split(' ').some((word: string) => word.startsWith(queryLower));
+                                      if (aWordStarts && !bWordStarts) return -1;
+                                      if (!aWordStarts && bWordStarts) return 1;
+                                      
+                                      // Check if it's a popular landmark
+                                      const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
+                                      const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
+                                      if (aPopular && !bPopular) return -1;
+                                      if (!aPopular && bPopular) return 1;
+                                      
+                                      return 0;
+                                    })
+                                    .map((l: any) => l.name);
+                                  setSearchSuggestions(suggestions.slice(0, 3));
+                                  setShowSuggestions(suggestions.length !== 0);
+                                } catch (error) {
+                                  console.error('Error searching landmarks:', error);
+                                }
                               }
                             }}
-                            className="w-full pl-10 pr-3 py-2 bg-zinc-800 bg-opacity-40 border border-stone-700 border-opacity-30 rounded-lg text-white text-sm placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-50 transition-colors" 
+                            className="w-full pl-10 pr-4 py-3 bg-zinc-800 bg-opacity-50 border border-zinc-700 border-opacity-40 rounded-2xl text-white text-sm placeholder-white placeholder-opacity-60 focus:outline-none focus:border-orange-400 focus:bg-zinc-800 transition-all" 
                           />
                           {showSuggestions && searchSuggestions.length > 0 ? (
-                            <div className="absolute top-full left-0 right-0 mt-1 z-50">
-                              <SearchSuggestions
+                            <div className="absolute top-full left-0 right-0 mt-1 z-[10000]">
+                              <ModernSearchSuggestions
                                 suggestions={searchSuggestions}
                                 onSelect={(suggestion) => {
                                   handleAddPlace(day, suggestion);
@@ -472,17 +1005,21 @@ export default function Dashboard() {
                           <button
                             onClick={() => handleFindLocations(day)}
                             disabled={loadingRecommendations}
-                            className="bg-purple-500 bg-opacity-15 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 hover:bg-opacity-25 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-purple-500 border-opacity-30"
+                            className="bg-gradient-to-br from-purple-500 to-purple-600 text-white px-4 py-2.5 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 hover:shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                           >
-                            <span>*</span>
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M9.5 2L8 6H4l3.5 3L6 13l3.5-2L13 13l-1.5-4L15 6h-4l-1.5-4zm9 6l-.9 2.3L15 11l2.6 1.7L17 15l.9-2.3L20.5 11l-2.6-1.7zM18.5 17l-.6 1.5L16.5 19l1.4.9.6 1.6.6-1.6 1.4-.9-1.4-.9z"/>
+                            </svg>
                             Suggest
                           </button>
 
                           <label
                             htmlFor={'fileUpload-' + day}
-                            className="bg-orange-500 bg-opacity-15 text-white px-3 py-2 rounded-lg text-sm font-medium cursor-pointer flex items-center justify-center gap-2 hover:bg-opacity-25 transition-all border border-orange-500 border-opacity-30"
+                            className="bg-gradient-to-br from-orange-500 to-orange-600 text-white px-4 py-2.5 rounded-2xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 hover:shadow-lg hover:scale-105 transition-all shadow-md"
                           >
-                            <span>+</span>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                            </svg>
                             AI Detect
                           </label>
                           <input
@@ -500,7 +1037,7 @@ export default function Dashboard() {
 
                         {dayLocations.length === 0 ? (
                           <div className="py-6 text-center">
-                            <p className="text-stone-500 text-sm">No locations yet</p>
+                            <p className="text-white text-opacity-60 text-sm">No locations yet</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -511,15 +1048,15 @@ export default function Dashboard() {
                                   onDragStart={(e) => handleDragStart(e, location.id)}
                                   onDragOver={handleDragOver}
                                   onDrop={(e) => handleDrop(e, location.id, day)}
-                                  className={'rounded-xl overflow-hidden transition-all cursor-move shadow-lg ' + (
+                                  className={'rounded-3xl overflow-hidden transition-all duration-300 cursor-move ' + (
                                     selectedLocation?.id === location.id
-                                      ? 'bg-orange-500 bg-opacity-20 border-2 border-orange-500 border-opacity-50 shadow-orange-500/20'
-                                      : 'bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-30 hover:bg-opacity-60 hover:shadow-xl'
+                                      ? 'bg-orange-500 bg-opacity-20 border-2 border-orange-400 shadow-[0_8px_30px_rgb(249,115,22,0.4)] scale-[1.02]'
+                                      : 'bg-zinc-800 bg-opacity-60 border border-zinc-700 border-opacity-40 hover:bg-opacity-70 hover:shadow-[0_8px_30px_rgb(0,0,0,0.4)] hover:scale-[1.01]'
                                   )}
                                 >
                                   {location.image && (
                                     <div
-                                      className="relative h-32 w-full cursor-pointer"
+                                      className="relative h-40 w-full cursor-pointer"
                                       onClick={() => setSelectedLocation(location)}
                                     >
                                       <img
@@ -528,7 +1065,7 @@ export default function Dashboard() {
                                         className="absolute inset-0 w-full h-full object-cover"
                                       />
                                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                                      <div className="absolute top-2 left-2 w-7 h-7 bg-orange-500 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg border-2 border-white">
+                                      <div className="absolute top-3 left-3 w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-xl border-2 border-white">
                                         {index + 1}
                                       </div>
                                       <button
@@ -536,7 +1073,7 @@ export default function Dashboard() {
                                           e.stopPropagation();
                                           handleDeleteLocation(location.id);
                                         }}
-                                        className="absolute top-2 right-2 w-7 h-7 bg-zinc-900 bg-opacity-80 hover:bg-opacity-95 backdrop-blur-sm rounded-lg flex items-center justify-center transition-all border border-stone-700 border-opacity-30"
+                                        className="absolute top-3 right-3 w-8 h-8 bg-black bg-opacity-60 hover:bg-opacity-80 backdrop-blur-xl rounded-full flex items-center justify-center transition-all border border-white border-opacity-20 hover:scale-110"
                                       >
                                         <span className="text-stone-400 hover:text-red-400 transition-colors">X</span>
                                       </button>
@@ -589,6 +1126,7 @@ export default function Dashboard() {
                                             type="text"
                                             value={insertSearchInput[`${day}-${index}`] || ''}
                                             placeholder="Search location..."
+                                            className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-zinc-700 border-opacity-40 rounded-2xl text-white text-sm placeholder-white placeholder-opacity-60 focus:outline-none focus:border-orange-400 focus:bg-zinc-800 transition-all"
                                             onChange={(e) => handleInsertSearchChange(`${day}-${index}`, e.target.value)}
                                             onKeyDown={(e) => {
                                               if (e.key === 'Enter' && insertSearchInput[`${day}-${index}`]?.trim()) {
@@ -612,11 +1150,10 @@ export default function Dashboard() {
                                                 setInsertSearchInput(newInput);
                                               }, 200);
                                             }}
-                                            className="w-full px-3 py-2 bg-zinc-800 bg-opacity-40 border border-stone-700 border-opacity-30 rounded-lg text-white text-sm placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-50 transition-colors"
                                           />
                                           {showInsertSuggestions[`${day}-${index}`] && insertSearchSuggestions[`${day}-${index}`]?.length > 0 && (
-                                            <div className="absolute top-full left-0 right-0 mt-1 z-50">
-                                              <SearchSuggestions
+                                            <div className="absolute top-full left-0 right-0 mt-1 z-[10000]">
+                                              <ModernSearchSuggestions
                                                 suggestions={insertSearchSuggestions[`${day}-${index}`]}
                                                 onSelect={(suggestion) => {
                                                   handleAddPlace(day, suggestion, index);
@@ -635,7 +1172,7 @@ export default function Dashboard() {
                                     ) : (
                                       <button
                                         onClick={() => setInsertSearchInput({ ...insertSearchInput, [`${day}-${index}`]: '' })}
-                                        className="w-6 h-6 bg-zinc-800 bg-opacity-60 hover:bg-opacity-90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all border border-stone-700 border-opacity-30 hover:border-orange-500 hover:border-opacity-50"
+                                        className="w-7 h-7 bg-zinc-800 bg-opacity-60 hover:bg-opacity-80 backdrop-blur-xl rounded-full flex items-center justify-center transition-all border border-zinc-700 border-opacity-40 hover:border-orange-400 hover:scale-110 shadow-lg"
                                       >
                                         <span className="text-stone-400 hover:text-orange-400 transition-colors text-lg">+</span>
                                       </button>
@@ -645,8 +1182,8 @@ export default function Dashboard() {
                               </React.Fragment>
                             ))}
 
-                            <div className="relative mt-3">
-                              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-stone-500 z-10">@</span>
+                            <div className="relative mt-3 mb-2">
+                              <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white text-opacity-60 z-10">@</span>
                               <input
                                 type="text"
                                 value={bottomSearchInput[day] || ''}
@@ -659,18 +1196,49 @@ export default function Dashboard() {
                                     setShowBottomSuggestions({ ...showBottomSuggestions, [day]: false });
                                   }
                                 }}
-                                onFocus={() => {
+                                onFocus={async () => {
                                   const input = bottomSearchInput[day];
-                                  const suggestions = bottomSearchSuggestions[day];
-                                  if (input && input.trim() && suggestions && suggestions.length > 0) {
-                                    setShowBottomSuggestions({ ...showBottomSuggestions, [day]: true });
+                                  if (input && input.trim().length > 1) {
+                                    try {
+                                      const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
+                                      const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(input) + countryParam);
+                                      const data = await response.json();
+                                      
+                                      // Prioritize popular landmarks and query relevance
+                                      const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
+                                      const queryLower = input.toLowerCase();
+                                      const suggestions = data.landmarks
+                                        .sort((a: any, b: any) => {
+                                          const aLower = a.name.toLowerCase();
+                                          const bLower = b.name.toLowerCase();
+                                          
+                                          // Check if name starts with query (highest priority)
+                                          const aStarts = aLower.startsWith(queryLower);
+                                          const bStarts = bLower.startsWith(queryLower);
+                                          if (aStarts && !bStarts) return -1;
+                                          if (!aStarts && bStarts) return 1;
+                                          
+                                          // Check if it's a popular landmark
+                                          const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
+                                          const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
+                                          if (aPopular && !bPopular) return -1;
+                                          if (!aPopular && bPopular) return 1;
+                                          
+                                          return 0;
+                                        })
+                                        .map((l: any) => l.name);
+                                      setBottomSearchSuggestions({ ...bottomSearchSuggestions, [day]: suggestions.slice(0, 3) });
+                                      setShowBottomSuggestions({ ...showBottomSuggestions, [day]: suggestions.length !== 0 });
+                                    } catch (error) {
+                                      console.error('Error searching landmarks:', error);
+                                    }
                                   }
                                 }}
-                                className="w-full pl-10 pr-3 py-2 bg-zinc-800 bg-opacity-40 border border-stone-700 border-opacity-30 rounded-lg text-white text-sm placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-50 transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-zinc-800 bg-opacity-50 border border-zinc-700 border-opacity-40 rounded-2xl text-white text-sm placeholder-white placeholder-opacity-60 focus:outline-none focus:border-orange-400 focus:bg-zinc-800 transition-all"
                               />
                               {showBottomSuggestions[day] && bottomSearchSuggestions[day] && bottomSearchSuggestions[day].length > 0 ? (
-                                <div className="absolute top-full left-0 right-0 mt-1 z-50">
-                                  <SearchSuggestions
+                                <div className="absolute bottom-full left-0 right-0 mb-2 z-[10000]">
+                                  <ModernSearchSuggestions
                                     suggestions={bottomSearchSuggestions[day]}
                                     onSelect={(suggestion) => {
                                       handleAddPlace(day, suggestion);

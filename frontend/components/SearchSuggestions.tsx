@@ -10,7 +10,7 @@ export default function SearchSuggestions({ suggestions, onSelect }: SearchSugge
         <button
           key={index}
           onClick={() => onSelect(suggestion)}
-          className="w-full text-left px-4 py-2.5 text-white text-sm hover:bg-orange-500 hover:bg-opacity-20 transition-colors border-b border-stone-700 border-opacity-20 last:border-b-0"
+          className="w-full text-left px-4 py-2.5 text-white text-sm hover:bg-orange-500 hover:bg-opacity-20 transition-colors border-b border-stone-700 border-opacity-20 last:border-b-0 no-underline cursor-pointer"
         >
           {suggestion}
         </button>
