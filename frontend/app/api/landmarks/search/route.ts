@@ -113,9 +113,9 @@ export async function GET(request: Request) {
       'staue': 'statue of liberty'
     };
     
-    const queryLower = baseQuery.toLowerCase();
+    const baseQueryLower = baseQuery.toLowerCase();
     for (const [typo, correct] of Object.entries(corrections)) {
-      if (queryLower.includes(typo)) {
+      if (baseQueryLower.includes(typo)) {
         searchQueries.push(country ? `${correct}, ${country}` : correct);
         break;
       }
