@@ -327,11 +327,36 @@ export default function Dashboard() {
               spellCheck={false}
               className="text-base font-medium text-stone-100 bg-transparent border-none outline-none focus:text-orange-400 transition-colors placeholder-stone-600"
             />
-            {startDate && endDate && (
-              <>
-                <div className="h-5 w-px bg-stone-700 bg-opacity-30"></div>
-                <span className="text-sm text-stone-300">{startDate} - {endDate}</span>
-              </>
+            <div className="h-5 w-px bg-stone-700 bg-opacity-30"></div>
+            {isEditingDates ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="text-xs bg-transparent border-b border-stone-700 border-opacity-30 text-stone-300 focus:outline-none focus:border-orange-400"
+                />
+                <span className="text-stone-500 text-xs">-</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="text-xs bg-transparent border-b border-stone-700 border-opacity-30 text-stone-300 focus:outline-none focus:border-orange-400"
+                />
+                <button
+                  onClick={() => setIsEditingDates(false)}
+                  className="text-xs text-orange-400 hover:text-orange-300 ml-1"
+                >
+                  ✓
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsEditingDates(true)}
+                className="text-sm text-stone-300 hover:text-orange-400 transition-colors"
+              >
+                {startDate && endDate ? `${startDate} - ${endDate}` : 'Add dates'}
+              </button>
             )}
           </div>
           <button className="text-stone-400 hover:text-stone-300 px-3 py-1.5 transition-colors text-sm">
@@ -376,7 +401,7 @@ export default function Dashboard() {
               
               return (
                 <div key={day} className="mb-3 mx-3 first:mt-3">
-                  <div className="bg-zinc-900 bg-opacity-60 backdrop-blur-sm rounded-xl border border-stone-700 border-opacity-30 overflow-hidden shadow-lg">
+                  <div className="bg-zinc-800 bg-opacity-50 backdrop-blur-xl rounded-2xl border border-stone-700 border-opacity-20 overflow-hidden shadow-2xl">
                     <button
                       onClick={() => setCurrentDay(isExpanded ? 0 : day)}
                       className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800 hover:bg-opacity-30 transition-all"
@@ -486,10 +511,10 @@ export default function Dashboard() {
                                   onDragStart={(e) => handleDragStart(e, location.id)}
                                   onDragOver={handleDragOver}
                                   onDrop={(e) => handleDrop(e, location.id, day)}
-                                  className={'rounded-lg overflow-hidden transition-all cursor-move ' + (
+                                  className={'rounded-xl overflow-hidden transition-all cursor-move shadow-lg ' + (
                                     selectedLocation?.id === location.id
-                                      ? 'bg-orange-500 bg-opacity-20 border border-orange-500 border-opacity-40 shadow-lg'
-                                      : 'bg-zinc-800 bg-opacity-40 border border-stone-700 border-opacity-20 hover:bg-opacity-50'
+                                      ? 'bg-orange-500 bg-opacity-20 border-2 border-orange-500 border-opacity-50 shadow-orange-500/20'
+                                      : 'bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-30 hover:bg-opacity-60 hover:shadow-xl'
                                   )}
                                 >
                                   {location.image && (
@@ -503,7 +528,7 @@ export default function Dashboard() {
                                         className="absolute inset-0 w-full h-full object-cover"
                                       />
                                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                                      <div className="absolute top-2 left-2 w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center text-white text-sm font-semibold shadow-lg">
+                                      <div className="absolute top-2 left-2 w-7 h-7 bg-orange-500 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg border-2 border-white">
                                         {index + 1}
                                       </div>
                                       <button
@@ -556,15 +581,65 @@ export default function Dashboard() {
 
                                 {index < dayLocations.length - 1 && (
                                   <div className="flex justify-center -my-1 z-10 relative">
-                                    <button
-                                      onClick={() => {
-                                        const name = prompt('Enter location name:');
-                                        if (name) handleAddPlace(day, name, index);
-                                      }}
-                                      className="w-6 h-6 bg-zinc-800 bg-opacity-60 hover:bg-opacity-90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all border border-stone-700 border-opacity-30 hover:border-orange-500 hover:border-opacity-50"
-                                    >
-                                      <span className="text-stone-400 hover:text-orange-400 transition-colors text-lg">+</span>
-                                    </button>
+                                    {insertSearchInput[`${day}-${index}`] !== undefined ? (
+                                      <div className="w-full px-4 py-2">
+                                        <div className="relative">
+                                          <input
+                                            autoFocus
+                                            type="text"
+                                            value={insertSearchInput[`${day}-${index}`] || ''}
+                                            placeholder="Search location..."
+                                            onChange={(e) => handleInsertSearchChange(`${day}-${index}`, e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter' && insertSearchInput[`${day}-${index}`]?.trim()) {
+                                                handleAddPlace(day, insertSearchInput[`${day}-${index}`].trim(), index);
+                                                const newInput = { ...insertSearchInput };
+                                                delete newInput[`${day}-${index}`];
+                                                setInsertSearchInput(newInput);
+                                                const newShow = { ...showInsertSuggestions };
+                                                delete newShow[`${day}-${index}`];
+                                                setShowInsertSuggestions(newShow);
+                                              } else if (e.key === 'Escape') {
+                                                const newInput = { ...insertSearchInput };
+                                                delete newInput[`${day}-${index}`];
+                                                setInsertSearchInput(newInput);
+                                              }
+                                            }}
+                                            onBlur={() => {
+                                              setTimeout(() => {
+                                                const newInput = { ...insertSearchInput };
+                                                delete newInput[`${day}-${index}`];
+                                                setInsertSearchInput(newInput);
+                                              }, 200);
+                                            }}
+                                            className="w-full px-3 py-2 bg-zinc-800 bg-opacity-40 border border-stone-700 border-opacity-30 rounded-lg text-white text-sm placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-50 transition-colors"
+                                          />
+                                          {showInsertSuggestions[`${day}-${index}`] && insertSearchSuggestions[`${day}-${index}`]?.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-1 z-50">
+                                              <SearchSuggestions
+                                                suggestions={insertSearchSuggestions[`${day}-${index}`]}
+                                                onSelect={(suggestion) => {
+                                                  handleAddPlace(day, suggestion, index);
+                                                  const newInput = { ...insertSearchInput };
+                                                  delete newInput[`${day}-${index}`];
+                                                  setInsertSearchInput(newInput);
+                                                  const newShow = { ...showInsertSuggestions };
+                                                  delete newShow[`${day}-${index}`];
+                                                  setShowInsertSuggestions(newShow);
+                                                }}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => setInsertSearchInput({ ...insertSearchInput, [`${day}-${index}`]: '' })}
+                                        className="w-6 h-6 bg-zinc-800 bg-opacity-60 hover:bg-opacity-90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all border border-stone-700 border-opacity-30 hover:border-orange-500 hover:border-opacity-50"
+                                      >
+                                        <span className="text-stone-400 hover:text-orange-400 transition-colors text-lg">+</span>
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                               </React.Fragment>
