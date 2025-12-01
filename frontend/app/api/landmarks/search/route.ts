@@ -84,15 +84,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Generate multiple search variations for better results
-    const searchQueries = [];
     const baseQuery = query.trim();
+    const baseQueryLower = baseQuery.toLowerCase();
     
-    // Original query
+    // Intelligent query strategy based on input
+    const searchQueries: string[] = [];
+    
+    // Strategy 1: Direct search with country context
     searchQueries.push(country ? `${baseQuery}, ${country}` : baseQuery);
     
-    // Add "landmark" or "tower" if query looks like a landmark
-    if (!baseQuery.toLowerCase().includes('landmark') && !baseQuery.toLowerCase().includes('tower')) {
+    // Strategy 2: Add context based on query type
+    const isShortQuery = baseQuery.split(' ').length === 1;
+    const looksLikeLandmark = /tower|temple|palace|castle|museum|cathedral|monument|bridge|statue/i.test(baseQuery);
+    
+    if (isShortQuery && !looksLikeLandmark) {
+      // For single words, try both landmark and city interpretations
       searchQueries.push(country ? `${baseQuery} landmark, ${country}` : `${baseQuery} landmark`);
     }
     
@@ -113,7 +119,7 @@ export async function GET(request: Request) {
       'staue': 'statue of liberty'
     };
     
-    const baseQueryLower = baseQuery.toLowerCase();
+    // Check for typos using the already defined baseQueryLower
     for (const [typo, correct] of Object.entries(corrections)) {
       if (baseQueryLower.includes(typo)) {
         searchQueries.push(country ? `${correct}, ${country}` : correct);
@@ -184,29 +190,53 @@ export async function GET(request: Request) {
       return true;
     });
 
-    // Apply fuzzy matching and sort by relevance
+    // Smart filtering and scoring
     const searchQueryLower = query.toLowerCase();
-    results = results
-      .filter((r: any) => fuzzyMatch(query, r.name) || fuzzyMatch(query, r.description))
-      .sort((a: any, b: any) => {
-        const aName = a.name.toLowerCase();
-        const bName = b.name.toLowerCase();
-        
-        // Exact match first
-        if (aName === searchQueryLower) return -1;
-        if (bName === searchQueryLower) return 1;
-        
-        // Starts with query
-        if (aName.startsWith(searchQueryLower)) return -1;
-        if (bName.startsWith(searchQueryLower)) return 1;
-        
-        // Contains query
-        if (aName.includes(searchQueryLower)) return -1;
-        if (bName.includes(searchQueryLower)) return 1;
-        
-        // Shorter names (more specific) first
-        return aName.length - bName.length;
-      });
+    
+    // Filter with fuzzy matching
+    results = results.filter((r: any) => 
+      fuzzyMatch(query, r.name) || fuzzyMatch(query, r.description)
+    );
+    
+    // Score and sort results intelligently
+    results = results.map((r: any) => {
+      const nameLower = r.name.toLowerCase();
+      let score = 0;
+      
+      // Exact match: highest priority
+      if (nameLower === searchQueryLower) score += 1000;
+      
+      // Starts with query: high priority
+      else if (nameLower.startsWith(searchQueryLower)) score += 500;
+      
+      // Contains query: medium priority  
+      else if (nameLower.includes(searchQueryLower)) score += 250;
+      
+      // Word-level matching bonus (e.g., "tokyo tower" should beat "tokyo")
+      const queryWords = searchQueryLower.split(' ');
+      const nameWords = nameLower.split(' ');
+      if (queryWords.length > 1) {
+        // Multi-word query: bonus if all words present
+        const allWordsMatch = queryWords.every(qw => nameWords.some(nw => nw.startsWith(qw) || nw.includes(qw)));
+        if (allWordsMatch) score += 300;
+      }
+      
+      // Bonus for landmark/tourism types
+      if (r.type === 'tourism' || r.addresstype === 'tourism') score += 100;
+      if (/monument|memorial|attraction|landmark|tower|museum|castle|palace|temple|cathedral/i.test(r.type)) score += 150;
+      
+      // Penalty for generic location types
+      if (/street|road|neighbourhood|suburb|city_block|administrative|region|state|country/i.test(r.addresstype)) score -= 100;
+      if (r.addresstype === 'city' && queryWords.length > 1) score -= 50; // Penalize cities when searching for specific landmarks
+      
+      // Penalty for very long names (likely addresses)
+      if (nameLower.length > 50) score -= 100;
+      
+      // Bonus for matching country context
+      if (country && r.country.toLowerCase().includes(country.toLowerCase())) score += 75;
+      
+      return { ...r, score };
+    }).sort((a: any, b: any) => b.score - a.score);
 
     // Store in cache
     cache.set(cacheKey, {

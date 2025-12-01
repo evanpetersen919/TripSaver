@@ -24,3 +24,62 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #27272a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #52525b;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #71717a;
+}
+
+/* Calendar styling - orange theme */
+* {
+  accent-color: #fb923c;
+}
+
+input[type="date"] {
+  accent-color: #fb923c;
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: brightness(0) saturate(100%) invert(67%) sepia(80%) saturate(463%) hue-rotate(340deg) brightness(101%) contrast(97%);
+}
+
+input[type="date"]::-webkit-clear-button,
+input[type="date"]::-webkit-inner-spin-button {
+  display: none;
+}
+
+input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  color: white;
+}
+
+/* Force orange for calendar popup elements */
+:root {
+  color-scheme: dark;
+  accent-color: #fb923c;
+}
+
+html {
+  accent-color: #fb923c;
+}
+
+body {
+  accent-color: #fb923c;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -10,6 +10,60 @@ export default function PlanTrip() {
   const [destination, setDestination] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedLat, setSelectedLat] = useState("35.6762");
+  const [selectedLng, setSelectedLng] = useState("139.6503");
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Pre-cache popular destinations on page load
+  useEffect(() => {
+    const popularDestinations = [
+      'Tokyo', 'Paris', 'London', 'New York', 'Rome', 
+      'Barcelona', 'Bangkok', 'Dubai', 'Singapore', 'Sydney',
+      'Los Angeles', 'Miami', 'San Francisco', 'Las Vegas',
+      'Greece', 'Italy', 'Spain', 'Japan', 'France', 'United Kingdom'
+    ];
+    
+    // Cache destinations in the background
+    popularDestinations.forEach((dest, index) => {
+      setTimeout(() => {
+        fetch(`/api/landmarks/search?q=${encodeURIComponent(dest)}`).catch(() => {});
+      }, index * 100); // Stagger requests to avoid rate limiting
+    });
+  }, []);
+
+  const handleDestinationChange = (value: string) => {
+    setDestination(value);
+    setShowSuggestions(true);
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    if (value.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/landmarks/search?q=${encodeURIComponent(value)}`);
+        const data = await response.json();
+        setSuggestions(data.landmarks || []);
+      } catch (error) {
+        console.error('Error fetching suggestions:', error);
+      }
+    }, 300);
+  };
+
+  const selectSuggestion = (suggestion: any) => {
+    setDestination(suggestion.name);
+    setSelectedLat(suggestion.lat);
+    setSelectedLng(suggestion.lng);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,8 +73,8 @@ export default function PlanTrip() {
       destination: destination,
       start: startDate,
       end: endDate,
-      lat: "35.6762",
-      lng: "139.6503"
+      lat: selectedLat,
+      lng: selectedLng
     });
     
     router.push('/dashboard?' + params.toString());
@@ -57,18 +111,45 @@ export default function PlanTrip() {
             />
           </div>
 
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium text-stone-300 mb-2">
               Destination
             </label>
             <input
               type="text"
               value={destination}
-              onChange={(e) => setDestination(e.target.value)}
+              onChange={(e) => handleDestinationChange(e.target.value)}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               placeholder="e.g., Tokyo, Japan"
               required
+              spellCheck={false}
+              autoComplete="off"
               className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-30 rounded-lg text-white placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-50 transition-colors"
             />
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto">
+                {suggestions.slice(0, 8).map((suggestion, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => selectSuggestion(suggestion)}
+                    className="w-full px-4 py-3 text-left hover:bg-zinc-700 transition-colors border-b border-zinc-700 last:border-b-0 flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4 text-orange-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium truncate">{suggestion.name}</p>
+                      {suggestion.country && (
+                        <p className="text-stone-400 text-xs truncate">{suggestion.country}</p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

@@ -321,88 +321,24 @@ export default function Dashboard() {
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
     
-    // Clear previous debounce
     if (searchDebounceRef.current) {
       clearTimeout(searchDebounceRef.current);
     }
     
     if (value.trim().length > 1) {
-      // Debounce API call by 300ms
       searchDebounceRef.current = setTimeout(async () => {
         try {
           const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
           const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
           const data = await response.json();
           
-          // Prioritize popular landmarks and query relevance
-          const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
-          const queryLower = value.toLowerCase();
-          
-          // Inject popular landmarks that match the query but might not be in API results
-          const matchingPopular = popularLandmarks.filter(landmark => {
-            const words = landmark.split(' ');
-            return words.some(word => word.startsWith(queryLower)) || landmark.includes(queryLower);
-          });
-          
-          // Add matching popular landmarks to results if not already present
-          const existingNames = new Set(data.landmarks.map((l: any) => l.name.toLowerCase()));
-          matchingPopular.forEach(landmark => {
-            if (!existingNames.has(landmark)) {
-              data.landmarks.unshift({ name: landmark.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), latitude: 0, longitude: 0 });
-            }
-          });
-          
-          // Filter out results that match popular landmarks from other countries when destination is set
-          let filteredLandmarks = data.landmarks;
-          if (destination) {
-            const destLower = destination.toLowerCase();
-            const countryLandmarks: { [key: string]: string[] } = {
-              'japan': ['tokyo tower', 'tokyo skytree'],
-              'france': ['eiffel tower', 'louvre'],
-              'united kingdom': ['big ben', 'london eye'],
-              'uk': ['big ben', 'london eye'],
-              'london': ['big ben', 'london eye'],
-              'united states': ['statue of liberty', 'times square'],
-              'usa': ['statue of liberty', 'times square'],
-              'new york': ['statue of liberty', 'times square'],
-              'italy': ['colosseum'],
-              'rome': ['colosseum'],
-              'spain': ['sagrada familia'],
-              'barcelona': ['sagrada familia']
-            };
-            
-            const allowedLandmarks = countryLandmarks[destLower] || [];
-            filteredLandmarks = data.landmarks.filter((l: any) => {
-              const nameLower = l.name.toLowerCase();
-              // Keep if not a popular landmark, or if it matches the destination country
-              const isPopularLandmark = popularLandmarks.some(p => nameLower.includes(p) || p.includes(nameLower));
-              if (!isPopularLandmark) return true;
-              return allowedLandmarks.some(allowed => nameLower.includes(allowed) || allowed.includes(nameLower));
-            });
-          }
-          
-          const suggestions = filteredLandmarks
-            .sort((a: any, b: any) => {
-              const aLower = a.name.toLowerCase();
-              const bLower = b.name.toLowerCase();
-              
-              // Check if name starts with query (highest priority)
-              const aStarts = aLower.startsWith(queryLower);
-              const bStarts = bLower.startsWith(queryLower);
-              if (aStarts && !bStarts) return -1;
-              if (!aStarts && bStarts) return 1;
-              
-              // Check if it's a popular landmark
-              const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
-              const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
-              if (aPopular && !bPopular) return -1;
-              if (!aPopular && bPopular) return 1;
-              
-              return 0;
-            })
+          // API now handles all intelligent sorting, filtering, and scoring
+          const suggestions = (data.landmarks || [])
+            .slice(0, 8) // Top 8 results
             .map((l: any) => l.name);
-          setSearchSuggestions(suggestions.slice(0, 3));
-          setShowSuggestions(suggestions.length !== 0);
+          
+          setSearchSuggestions(suggestions);
+          setShowSuggestions(suggestions.length > 0);
         } catch (error) {
           console.error('Error searching landmarks:', error);
           setShowSuggestions(false);
@@ -416,97 +352,24 @@ export default function Dashboard() {
   const handleBottomSearchChange = (day: number, value: string) => {
     setBottomSearchInput({ ...bottomSearchInput, [day]: value });
     
-    // Clear previous debounce for this day
     if (bottomSearchDebounceRef.current[day]) {
       clearTimeout(bottomSearchDebounceRef.current[day]);
     }
     
     if (value.trim().length > 1) {
-      // Debounce API call by 300ms
       bottomSearchDebounceRef.current[day] = setTimeout(async () => {
         try {
           const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
           const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
           const data = await response.json();
           
-          // Prioritize popular landmarks and query relevance
-          const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
-          const queryLower = value.toLowerCase();
-          
-          // Only inject popular landmarks if no destination filter (to avoid showing wrong country landmarks)
-          if (!destination) {
-            // Inject popular landmarks that match the query but might not be in API results
-            const matchingPopular = popularLandmarks.filter(landmark => {
-              const words = landmark.split(' ');
-              return words.some(word => word.startsWith(queryLower)) || landmark.includes(queryLower);
-            });
-            
-            // Add matching popular landmarks to results if not already present
-            const existingNames = new Set(data.landmarks.map((l: any) => l.name.toLowerCase()));
-            matchingPopular.forEach(landmark => {
-              if (!existingNames.has(landmark)) {
-                data.landmarks.unshift({ name: landmark.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), latitude: 0, longitude: 0 });
-              }
-            });
-          }
-          
-          // Filter out results that match popular landmarks from other countries when destination is set
-          let filteredLandmarks = data.landmarks;
-          if (destination) {
-            const destLower = destination.toLowerCase();
-            const countryLandmarks: { [key: string]: string[] } = {
-              'japan': ['tokyo tower', 'tokyo skytree'],
-              'france': ['eiffel tower', 'louvre'],
-              'united kingdom': ['big ben', 'london eye'],
-              'uk': ['big ben', 'london eye'],
-              'london': ['big ben', 'london eye'],
-              'united states': ['statue of liberty', 'times square'],
-              'usa': ['statue of liberty', 'times square'],
-              'new york': ['statue of liberty', 'times square'],
-              'italy': ['colosseum'],
-              'rome': ['colosseum'],
-              'spain': ['sagrada familia'],
-              'barcelona': ['sagrada familia']
-            };
-            
-            const allowedLandmarks = countryLandmarks[destLower] || [];
-            filteredLandmarks = data.landmarks.filter((l: any) => {
-              const nameLower = l.name.toLowerCase();
-              // Keep if not a popular landmark, or if it matches the destination country
-              const isPopularLandmark = popularLandmarks.some(p => nameLower.includes(p) || p.includes(nameLower));
-              if (!isPopularLandmark) return true;
-              return allowedLandmarks.some(allowed => nameLower.includes(allowed) || allowed.includes(nameLower));
-            });
-          }
-          
-          const suggestions = filteredLandmarks
-            .sort((a: any, b: any) => {
-              const aLower = a.name.toLowerCase();
-              const bLower = b.name.toLowerCase();
-              
-              // Check if name starts with query (highest priority)
-              const aStarts = aLower.startsWith(queryLower);
-              const bStarts = bLower.startsWith(queryLower);
-              if (aStarts && !bStarts) return -1;
-              if (!aStarts && bStarts) return 1;
-              
-              // Check if any word in the name starts with query
-              const aWordStarts = aLower.split(' ').some((word: string) => word.startsWith(queryLower));
-              const bWordStarts = bLower.split(' ').some((word: string) => word.startsWith(queryLower));
-              if (aWordStarts && !bWordStarts) return -1;
-              if (!aWordStarts && bWordStarts) return 1;
-              
-              // Check if it's a popular landmark
-              const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
-              const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
-              if (aPopular && !bPopular) return -1;
-              if (!aPopular && bPopular) return 1;
-              
-              return 0;
-            })
+          // API handles all intelligent sorting and filtering
+          const suggestions = (data.landmarks || [])
+            .slice(0, 8)
             .map((l: any) => l.name);
-          setBottomSearchSuggestions({ ...bottomSearchSuggestions, [day]: suggestions.slice(0, 3) });
-          setShowBottomSuggestions({ ...showBottomSuggestions, [day]: suggestions.length !== 0 });
+          
+          setBottomSearchSuggestions({ ...bottomSearchSuggestions, [day]: suggestions });
+          setShowBottomSuggestions({ ...showBottomSuggestions, [day]: suggestions.length > 0 });
         } catch (error) {
           console.error('Error searching landmarks:', error);
           setShowBottomSuggestions({ ...showBottomSuggestions, [day]: false });
@@ -526,91 +389,19 @@ export default function Dashboard() {
     }
     
     if (value.trim().length > 1) {
-      // Debounce API call by 300ms
       insertSearchDebounceRef.current[key] = setTimeout(async () => {
         try {
           const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
           const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
           const data = await response.json();
           
-          // Prioritize popular landmarks and query relevance
-          const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
-          const queryLower = value.toLowerCase();
-          
-          // Only inject popular landmarks if no destination filter (to avoid showing wrong country landmarks)
-          if (!destination) {
-            // Inject popular landmarks that match the query but might not be in API results
-            const matchingPopular = popularLandmarks.filter(landmark => {
-              const words = landmark.split(' ');
-              return words.some(word => word.startsWith(queryLower)) || landmark.includes(queryLower);
-            });
-            
-            // Add matching popular landmarks to results if not already present
-            const existingNames = new Set(data.landmarks.map((l: any) => l.name.toLowerCase()));
-            matchingPopular.forEach(landmark => {
-              if (!existingNames.has(landmark)) {
-                data.landmarks.unshift({ name: landmark.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), latitude: 0, longitude: 0 });
-              }
-            });
-          }
-          
-          // Filter out results that match popular landmarks from other countries when destination is set
-          let filteredLandmarks = data.landmarks;
-          if (destination) {
-            const destLower = destination.toLowerCase();
-            const countryLandmarks: { [key: string]: string[] } = {
-              'japan': ['tokyo tower', 'tokyo skytree'],
-              'france': ['eiffel tower', 'louvre'],
-              'united kingdom': ['big ben', 'london eye'],
-              'uk': ['big ben', 'london eye'],
-              'london': ['big ben', 'london eye'],
-              'united states': ['statue of liberty', 'times square'],
-              'usa': ['statue of liberty', 'times square'],
-              'new york': ['statue of liberty', 'times square'],
-              'italy': ['colosseum'],
-              'rome': ['colosseum'],
-              'spain': ['sagrada familia'],
-              'barcelona': ['sagrada familia']
-            };
-            
-            const allowedLandmarks = countryLandmarks[destLower] || [];
-            filteredLandmarks = data.landmarks.filter((l: any) => {
-              const nameLower = l.name.toLowerCase();
-              // Keep if not a popular landmark, or if it matches the destination country
-              const isPopularLandmark = popularLandmarks.some(p => nameLower.includes(p) || p.includes(nameLower));
-              if (!isPopularLandmark) return true;
-              return allowedLandmarks.some(allowed => nameLower.includes(allowed) || allowed.includes(nameLower));
-            });
-          }
-          
-          const suggestions = filteredLandmarks
-            .sort((a: any, b: any) => {
-              const aLower = a.name.toLowerCase();
-              const bLower = b.name.toLowerCase();
-              
-              // Check if name starts with query (highest priority)
-              const aStarts = aLower.startsWith(queryLower);
-              const bStarts = bLower.startsWith(queryLower);
-              if (aStarts && !bStarts) return -1;
-              if (!aStarts && bStarts) return 1;
-              
-              // Check if any word in the name starts with query
-              const aWordStarts = aLower.split(' ').some((word: string) => word.startsWith(queryLower));
-              const bWordStarts = bLower.split(' ').some((word: string) => word.startsWith(queryLower));
-              if (aWordStarts && !bWordStarts) return -1;
-              if (!aWordStarts && bWordStarts) return 1;
-              
-              // Check if it's a popular landmark
-              const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
-              const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
-              if (aPopular && !bPopular) return -1;
-              if (!aPopular && bPopular) return 1;
-              
-              return 0;
-            })
+          // API handles all intelligent sorting and filtering
+          const suggestions = (data.landmarks || [])
+            .slice(0, 8)
             .map((l: any) => l.name);
-          setInsertSearchSuggestions({ ...insertSearchSuggestions, [key]: suggestions.slice(0, 3) });
-          setShowInsertSuggestions({ ...showInsertSuggestions, [key]: suggestions.length !== 0 });
+          
+          setInsertSearchSuggestions({ ...insertSearchSuggestions, [key]: suggestions });
+          setShowInsertSuggestions({ ...showInsertSuggestions, [key]: suggestions.length > 0 });
         } catch (error) {
           console.error('Error searching landmarks:', error);
           setShowInsertSuggestions({ ...showInsertSuggestions, [key]: false });
@@ -850,10 +641,7 @@ export default function Dashboard() {
               return (
                 <div key={day} className="mb-4 mx-4 first:mt-4 relative">
                   <div className="bg-zinc-800 bg-opacity-60 backdrop-blur-2xl rounded-3xl border border-zinc-700 border-opacity-40 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.3)]">
-                    <button
-                      onClick={() => setCurrentDay(isExpanded ? 0 : day)}
-                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-700 hover:bg-opacity-20 transition-all duration-200"
-                    >
+                    <div className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-700 hover:bg-opacity-20 transition-all duration-200">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white text-sm font-bold shadow-lg flex-shrink-0">
                           {day}
@@ -867,10 +655,9 @@ export default function Dashboard() {
                               type="text"
                               value={daySubheadings[day] || ''}
                               onChange={(e) => setDaySubheadings({ ...daySubheadings, [day]: e.target.value })}
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
                               placeholder="Add description..."
                               spellCheck={false}
+                              autoFocus={false}
                               className="block w-full mt-1 px-0 py-0.5 bg-transparent border-none text-white text-xs placeholder-white placeholder-opacity-60 focus:outline-none focus:text-white transition-all"
                             />
                           ) : (
@@ -880,12 +667,13 @@ export default function Dashboard() {
                           )}
                         </div>
                       </div>
-                      <span
-                        className={'text-stone-500 transition-transform inline-block flex-shrink-0 ml-2 ' + (isExpanded ? 'rotate-180' : '')}
+                      <button
+                        onClick={() => setCurrentDay(isExpanded ? 0 : day)}
+                        className="text-stone-500 transition-transform inline-block flex-shrink-0 ml-2 hover:text-stone-400 p-2 -m-2"
                       >
-                        v
-                      </span>
-                    </button>
+                        <span className={isExpanded ? 'rotate-180 inline-block' : 'inline-block'}>v</span>
+                      </button>
+                    </div>
 
                     {isExpanded && (
                       <div className="px-5 py-4">
