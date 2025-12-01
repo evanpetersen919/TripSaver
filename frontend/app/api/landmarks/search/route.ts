@@ -1,13 +1,22 @@
 import { NextResponse } from 'next/server';
 
-// Simple in-memory cache with 5 minute TTL
+// Simple in-memory cache with 24 hour TTL (landmark data doesn't change often)
 const cache = new Map<string, { data: any[], timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
-// Levenshtein distance for fuzzy matching
+// Request deduplication to prevent multiple simultaneous requests for same query
+const pendingRequests = new Map<string, Promise<any>>();
+
+// Optimized Levenshtein distance - only for short strings (< 15 chars)
 function levenshteinDistance(str1: string, str2: string): number {
   const len1 = str1.length;
   const len2 = str2.length;
+  
+  // Skip expensive calculation for long strings or very different lengths
+  if (len1 > 15 || len2 > 15 || Math.abs(len1 - len2) > 3) {
+    return 999;
+  }
+  
   const matrix: number[][] = [];
 
   for (let i = 0; i <= len1; i++) {
@@ -31,12 +40,12 @@ function levenshteinDistance(str1: string, str2: string): number {
   return matrix[len1][len2];
 }
 
-// Fuzzy match with typo tolerance
+// Optimized fuzzy match with early exits
 function fuzzyMatch(query: string, target: string): boolean {
   const queryLower = query.toLowerCase();
   const targetLower = target.toLowerCase();
   
-  // Exact match or substring
+  // Fast path: exact match or substring (90% of cases)
   if (targetLower.includes(queryLower) || queryLower.includes(targetLower)) {
     return true;
   }
@@ -49,17 +58,19 @@ function fuzzyMatch(query: string, target: string): boolean {
     if (qWord.length < 3) continue; // Skip very short words
     
     for (const tWord of targetWords) {
-      // Allow 1 character difference for words 3-5 chars, 2 for longer
-      const maxDistance = qWord.length <= 5 ? 1 : 2;
-      const distance = levenshteinDistance(qWord, tWord);
-      
-      if (distance <= maxDistance) {
+      // Fast path: check prefix matching first (cheaper than Levenshtein)
+      if (tWord.startsWith(qWord) || qWord.startsWith(tWord)) {
         return true;
       }
       
-      // Also check if one word starts with the other
-      if (tWord.startsWith(qWord) || qWord.startsWith(tWord)) {
-        return true;
+      // Only do expensive Levenshtein for reasonable word lengths
+      if (qWord.length <= 15 && tWord.length <= 15) {
+        const maxDistance = qWord.length <= 5 ? 1 : 2;
+        const distance = levenshteinDistance(qWord, tWord);
+        
+        if (distance <= maxDistance) {
+          return true;
+        }
       }
     }
   }
@@ -82,27 +93,27 @@ export async function GET(request: Request) {
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return NextResponse.json({ landmarks: cached.data });
   }
+  
+  // Request deduplication - if same request is in flight, wait for it
+  const pendingRequest = pendingRequests.get(cacheKey);
+  if (pendingRequest) {
+    const data = await pendingRequest;
+    return NextResponse.json({ landmarks: data });
+  }
 
-  try {
-    const baseQuery = query.trim();
-    const baseQueryLower = baseQuery.toLowerCase();
+  // Create promise for request deduplication
+  const requestPromise = (async () => {
+    try {
+      const baseQuery = query.trim();
+      const baseQueryLower = baseQuery.toLowerCase();
     
-    // Intelligent query strategy based on input
-    const searchQueries: string[] = [];
+
     
-    // Strategy 1: Direct search with country context
-    searchQueries.push(country ? `${baseQuery}, ${country}` : baseQuery);
+    // OPTIMIZATION: Only make ONE API call instead of 2 (cuts latency in half)
+    // Build optimal query with country context
+    const searchQuery = country ? `${baseQuery}, ${country}` : baseQuery;
     
-    // Strategy 2: Add context based on query type
-    const isShortQuery = baseQuery.split(' ').length === 1;
-    const looksLikeLandmark = /tower|temple|palace|castle|museum|cathedral|monument|bridge|statue/i.test(baseQuery);
-    
-    if (isShortQuery && !looksLikeLandmark) {
-      // For single words, try both landmark and city interpretations
-      searchQueries.push(country ? `${baseQuery} landmark, ${country}` : `${baseQuery} landmark`);
-    }
-    
-    // Try with slight spelling corrections for common landmarks
+    // Try spelling corrections for common typos
     const corrections: { [key: string]: string } = {
       'tokyo skytree': 'tokyo skytree',
       'tokyo skytre': 'tokyo skytree',
@@ -119,38 +130,29 @@ export async function GET(request: Request) {
       'staue': 'statue of liberty'
     };
     
-    // Check for typos using the already defined baseQueryLower
+    let finalQuery = searchQuery;
     for (const [typo, correct] of Object.entries(corrections)) {
       if (baseQueryLower.includes(typo)) {
-        searchQueries.push(country ? `${correct}, ${country}` : correct);
+        finalQuery = country ? `${correct}, ${country}` : correct;
         break;
       }
     }
     
-    // Fetch from all query variations and combine results
-    let allData: any[] = [];
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(finalQuery)}&format=json&limit=20&addressdetails=1&accept-language=en`;
     
-    for (const searchQuery of searchQueries.slice(0, 2)) { // Limit to 2 queries to avoid rate limits
-      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=10&addressdetails=1&accept-language=en`;
-      
-      const response = await fetch(nominatimUrl, {
-        headers: {
-          'User-Agent': 'TripSaver-Dashboard/1.0',
-          'Accept-Language': 'en'
-        },
-        next: { revalidate: 300 }
-      });
+    const response = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'TripSaver-Dashboard/1.0',
+        'Accept-Language': 'en'
+      },
+      next: { revalidate: 86400 } // Cache for 24 hours
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        allData = [...allData, ...data];
-      }
-      
-      // Small delay to respect rate limits
-      if (searchQueries.length > 1) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+    if (!response.ok) {
+      throw new Error('Nominatim API request failed');
     }
+    
+    const allData = await response.json();
     
     let results = allData.map((location: any) => {
       // Extract clean English name
@@ -238,15 +240,29 @@ export async function GET(request: Request) {
       return { ...r, score };
     }).sort((a: any, b: any) => b.score - a.score);
 
-    // Store in cache
-    cache.set(cacheKey, {
-      data: results,
-      timestamp: Date.now()
-    });
+      // Store in cache
+      cache.set(cacheKey, {
+        data: results,
+        timestamp: Date.now()
+      });
 
+      return results;
+    } catch (error) {
+      console.error('Error fetching from Nominatim:', error);
+      throw error;
+    }
+  })();
+  
+  // Store pending request for deduplication
+  pendingRequests.set(cacheKey, requestPromise);
+  
+  try {
+    const results = await requestPromise;
     return NextResponse.json({ landmarks: results });
   } catch (error) {
-    console.error('Error fetching from Nominatim:', error);
     return NextResponse.json({ landmarks: [], error: 'Failed to search locations' }, { status: 500 });
+  } finally {
+    // Clean up pending request
+    pendingRequests.delete(cacheKey);
   }
 }
