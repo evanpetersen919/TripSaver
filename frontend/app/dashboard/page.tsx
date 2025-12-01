@@ -28,6 +28,67 @@ interface Location {
   notes?: string;
 }
 
+// Constants
+const POPULAR_LANDMARKS = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
+
+const DESTINATION_IMAGES: { [key: string]: string } = {
+  'japan': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
+  'france': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
+  'italy': 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&q=80',
+  'spain': 'https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=800&q=80',
+  'united kingdom': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80',
+  'greece': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800&q=80',
+  'thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&q=80',
+  'australia': 'https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=800&q=80',
+  'california': 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80',
+  'hawaii': 'https://images.unsplash.com/photo-1542259009477-d625272157b7?w=800&q=80',
+  'iceland': 'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&q=80',
+  'new zealand': 'https://images.unsplash.com/photo-1507699622108-4be3abd695ad?w=800&q=80',
+};
+
+const COUNTRY_LANDMARKS: { [key: string]: string[] } = {
+  'japan': ['tokyo tower', 'tokyo skytree'],
+  'france': ['eiffel tower', 'louvre'],
+  'united kingdom': ['big ben', 'london eye'],
+  'uk': ['big ben', 'london eye'],
+  'london': ['big ben', 'london eye'],
+  'united states': ['statue of liberty', 'times square'],
+  'usa': ['statue of liberty', 'times square'],
+  'new york': ['statue of liberty', 'times square'],
+  'italy': ['colosseum'],
+  'rome': ['colosseum'],
+  'spain': ['sagrada familia'],
+  'barcelona': ['sagrada familia']
+};
+
+// Helper functions
+const sortSuggestionsByRelevance = (landmarks: any[], queryLower: string) => {
+  return landmarks.sort((a: any, b: any) => {
+    const aLower = a.name.toLowerCase();
+    const bLower = b.name.toLowerCase();
+    
+    // Check if name starts with query (highest priority)
+    const aStarts = aLower.startsWith(queryLower);
+    const bStarts = bLower.startsWith(queryLower);
+    if (aStarts && !bStarts) return -1;
+    if (!aStarts && bStarts) return 1;
+    
+    // Check if any word in the name starts with query
+    const aWordStarts = aLower.split(' ').some((word: string) => word.startsWith(queryLower));
+    const bWordStarts = bLower.split(' ').some((word: string) => word.startsWith(queryLower));
+    if (aWordStarts && !bWordStarts) return -1;
+    if (!aWordStarts && bWordStarts) return 1;
+    
+    // Check if it's a popular landmark
+    const aPopular = POPULAR_LANDMARKS.some(p => aLower.includes(p) || p.includes(aLower));
+    const bPopular = POPULAR_LANDMARKS.some(p => bLower.includes(p) || p.includes(bLower));
+    if (aPopular && !bPopular) return -1;
+    if (!aPopular && bPopular) return 1;
+    
+    return 0;
+  });
+};
+
 export default function Dashboard() {
   const router = useRouter();
   const [tripName, setTripName] = useState('My Trip');
@@ -84,27 +145,12 @@ export default function Dashboard() {
     if (lat) setDestinationLat(parseFloat(lat));
     if (lng) setDestinationLng(parseFloat(lng));
 
-    const destinationImages: { [key: string]: string } = {
-      'japan': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
-      'france': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
-      'italy': 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&q=80',
-      'spain': 'https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=800&q=80',
-      'united kingdom': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80',
-      'greece': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800&q=80',
-      'thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&q=80',
-      'australia': 'https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=800&q=80',
-      'california': 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80',
-      'hawaii': 'https://images.unsplash.com/photo-1542259009477-d625272157b7?w=800&q=80',
-      'iceland': 'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&q=80',
-      'new zealand': 'https://images.unsplash.com/photo-1507699622108-4be3abd695ad?w=800&q=80',
-    };
     if (dest) {
       const destLower = dest.toLowerCase();
-      if (destinationImages[destLower]) {
-        setDestinationImage(destinationImages[destLower]);
+      if (DESTINATION_IMAGES[destLower]) {
+        setDestinationImage(DESTINATION_IMAGES[destLower]);
       }
     }
-
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -479,23 +525,9 @@ export default function Dashboard() {
     }
     
     // Update destination image
-    const destinationImages: { [key: string]: string } = {
-      'japan': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
-      'france': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
-      'italy': 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&q=80',
-      'spain': 'https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=800&q=80',
-      'united kingdom': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80',
-      'greece': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800&q=80',
-      'thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&q=80',
-      'australia': 'https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=800&q=80',
-      'california': 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80',
-      'hawaii': 'https://images.unsplash.com/photo-1542259009477-d625272157b7?w=800&q=80',
-      'iceland': 'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&q=80',
-      'new zealand': 'https://images.unsplash.com/photo-1507699622108-4be3abd695ad?w=800&q=80',
-    };
     const destLower = dest.toLowerCase();
-    if (destinationImages[destLower]) {
-      setDestinationImage(destinationImages[destLower]);
+    if (DESTINATION_IMAGES[destLower]) {
+      setDestinationImage(DESTINATION_IMAGES[destLower]);
     }
   };
 
@@ -703,14 +735,12 @@ export default function Dashboard() {
                                   const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(searchInput) + countryParam);
                                   const data = await response.json();
                                   
-                                  // Prioritize popular landmarks and query relevance
-                                  const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
                                   const queryLower = searchInput.toLowerCase();
                                   
                                   // Only inject popular landmarks if no destination filter (to avoid showing wrong country landmarks)
                                   if (!destination) {
                                     // Inject popular landmarks that match the query but might not be in API results
-                                    const matchingPopular = popularLandmarks.filter(landmark => {
+                                    const matchingPopular = POPULAR_LANDMARKS.filter(landmark => {
                                       const words = landmark.split(' ');
                                       return words.some(word => word.startsWith(queryLower)) || landmark.includes(queryLower);
                                     });
@@ -728,57 +758,17 @@ export default function Dashboard() {
                                   let filteredLandmarks = data.landmarks;
                                   if (destination) {
                                     const destLower = destination.toLowerCase();
-                                    const countryLandmarks: { [key: string]: string[] } = {
-                                      'japan': ['tokyo tower', 'tokyo skytree'],
-                                      'france': ['eiffel tower', 'louvre'],
-                                      'united kingdom': ['big ben', 'london eye'],
-                                      'uk': ['big ben', 'london eye'],
-                                      'london': ['big ben', 'london eye'],
-                                      'united states': ['statue of liberty', 'times square'],
-                                      'usa': ['statue of liberty', 'times square'],
-                                      'new york': ['statue of liberty', 'times square'],
-                                      'italy': ['colosseum'],
-                                      'rome': ['colosseum'],
-                                      'spain': ['sagrada familia'],
-                                      'barcelona': ['sagrada familia']
-                                    };
-                                    
-                                    const allowedLandmarks = countryLandmarks[destLower] || [];
+                                    const allowedLandmarks = COUNTRY_LANDMARKS[destLower] || [];
                                     filteredLandmarks = data.landmarks.filter((l: any) => {
                                       const nameLower = l.name.toLowerCase();
                                       // Keep if not a popular landmark, or if it matches the destination country
-                                      const isPopularLandmark = popularLandmarks.some(p => nameLower.includes(p) || p.includes(nameLower));
+                                      const isPopularLandmark = POPULAR_LANDMARKS.some(p => nameLower.includes(p) || p.includes(nameLower));
                                       if (!isPopularLandmark) return true;
                                       return allowedLandmarks.some(allowed => nameLower.includes(allowed) || allowed.includes(nameLower));
                                     });
                                   }
                                   
-                                  const suggestions = filteredLandmarks
-                                    .sort((a: any, b: any) => {
-                                      const aLower = a.name.toLowerCase();
-                                      const bLower = b.name.toLowerCase();
-                                      
-                                      // Check if name starts with query (highest priority)
-                                      const aStarts = aLower.startsWith(queryLower);
-                                      const bStarts = bLower.startsWith(queryLower);
-                                      if (aStarts && !bStarts) return -1;
-                                      if (!aStarts && bStarts) return 1;
-                                      
-                                      // Check if any word in the name starts with query
-                                      const aWordStarts = aLower.split(' ').some((word: string) => word.startsWith(queryLower));
-                                      const bWordStarts = bLower.split(' ').some((word: string) => word.startsWith(queryLower));
-                                      if (aWordStarts && !bWordStarts) return -1;
-                                      if (!aWordStarts && bWordStarts) return 1;
-                                      
-                                      // Check if it's a popular landmark
-                                      const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
-                                      const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
-                                      if (aPopular && !bPopular) return -1;
-                                      if (!aPopular && bPopular) return 1;
-                                      
-                                      return 0;
-                                    })
-                                    .map((l: any) => l.name);
+                                  const suggestions = sortSuggestionsByRelevance(filteredLandmarks, queryLower).map((l: any) => l.name);
                                   setSearchSuggestions(suggestions.slice(0, 3));
                                   setShowSuggestions(suggestions.length !== 0);
                                 } catch (error) {
@@ -1024,29 +1014,8 @@ export default function Dashboard() {
                                       const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(input) + countryParam);
                                       const data = await response.json();
                                       
-                                      // Prioritize popular landmarks and query relevance
-                                      const popularLandmarks = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
                                       const queryLower = input.toLowerCase();
-                                      const suggestions = data.landmarks
-                                        .sort((a: any, b: any) => {
-                                          const aLower = a.name.toLowerCase();
-                                          const bLower = b.name.toLowerCase();
-                                          
-                                          // Check if name starts with query (highest priority)
-                                          const aStarts = aLower.startsWith(queryLower);
-                                          const bStarts = bLower.startsWith(queryLower);
-                                          if (aStarts && !bStarts) return -1;
-                                          if (!aStarts && bStarts) return 1;
-                                          
-                                          // Check if it's a popular landmark
-                                          const aPopular = popularLandmarks.some(p => aLower.includes(p) || p.includes(aLower));
-                                          const bPopular = popularLandmarks.some(p => bLower.includes(p) || p.includes(bLower));
-                                          if (aPopular && !bPopular) return -1;
-                                          if (!aPopular && bPopular) return 1;
-                                          
-                                          return 0;
-                                        })
-                                        .map((l: any) => l.name);
+                                      const suggestions = sortSuggestionsByRelevance(data.landmarks, queryLower).map((l: any) => l.name);
                                       setBottomSearchSuggestions({ ...bottomSearchSuggestions, [day]: suggestions.slice(0, 3) });
                                       setShowBottomSuggestions({ ...showBottomSuggestions, [day]: suggestions.length !== 0 });
                                     } catch (error) {
