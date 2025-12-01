@@ -105,7 +105,7 @@ export default function PlanTrip() {
               type="text"
               value={tripName}
               onChange={(e) => setTripName(e.target.value)}
-              placeholder="e.g., Summer in Tokyo"
+              placeholder="e.g., Summer in Japan"
               required
               className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-30 rounded-lg text-white placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-50 transition-colors"
             />
@@ -121,7 +121,7 @@ export default function PlanTrip() {
               onChange={(e) => handleDestinationChange(e.target.value)}
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-              placeholder="e.g., Tokyo, Japan"
+              placeholder="e.g., Japan, France"
               required
               spellCheck={false}
               autoComplete="off"

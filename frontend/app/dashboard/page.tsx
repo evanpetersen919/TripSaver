@@ -31,6 +31,20 @@ interface Location {
 // Constants
 const POPULAR_LANDMARKS = ['tokyo tower', 'tokyo skytree', 'eiffel tower', 'louvre', 'big ben', 'london eye', 'statue of liberty', 'times square', 'colosseum', 'sagrada familia'];
 
+// 50 distinct colors for different days (matches MapComponent)
+const dayColors = [
+  '#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444',
+  '#f59e0b', '#06b6d4', '#84cc16', '#ec4899', '#6366f1',
+  '#14b8a6', '#f43f5e', '#a855f7', '#eab308', '#0ea5e9',
+  '#22c55e', '#d946ef', '#fb923c', '#2563eb', '#059669',
+  '#7c3aed', '#dc2626', '#ca8a04', '#0891b2', '#65a30d',
+  '#db2777', '#4f46e5', '#0d9488', '#e11d48', '#9333ea',
+  '#facc15', '#0284c7', '#16a34a', '#c026d3', '#fb7185',
+  '#818cf8', '#14b8a6', '#f87171', '#fbbf24', '#38bdf8',
+  '#4ade80', '#a78bfa', '#fb7185', '#fde047', '#22d3ee',
+  '#86efac', '#c4b5fd', '#fca5a5', '#fde68a', '#7dd3fc'
+];
+
 const DESTINATION_IMAGES: { [key: string]: string } = {
   'japan': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
   'france': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
@@ -680,7 +694,10 @@ export default function Dashboard() {
                   <div className="bg-zinc-800 bg-opacity-60 backdrop-blur-2xl rounded-3xl border border-zinc-700 border-opacity-40 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.3)]">
                     <div className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-700 hover:bg-opacity-20 transition-all duration-200">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white text-sm font-bold shadow-lg flex-shrink-0">
+                        <div 
+                          className="w-9 h-9 rounded-2xl flex items-center justify-center text-white text-sm font-bold shadow-lg flex-shrink-0"
+                          style={{ backgroundColor: dayColors[day % dayColors.length] }}
+                        >
                           {day}
                         </div>
                         <div className="flex-1 min-w-0 text-left">
@@ -861,7 +878,10 @@ export default function Dashboard() {
                                         className="absolute inset-0 w-full h-full object-cover"
                                       />
                                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                                      <div className="absolute top-3 left-3 w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-xl border-2 border-white">
+                                      <div 
+                                        className="absolute top-3 left-3 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-xl border-2 border-white"
+                                        style={{ backgroundColor: dayColors[day % dayColors.length] }}
+                                      >
                                         {index + 1}
                                       </div>
                                       <button
