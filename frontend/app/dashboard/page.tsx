@@ -136,6 +136,7 @@ export default function Dashboard() {
   const [showMoreInfo, setShowMoreInfo] = useState<string | null>(null);
   const [placeDetailsCache, setPlaceDetailsCache] = useState<{ [key: string]: any }>({});
   const [loadingPlaceDetails, setLoadingPlaceDetails] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Debounce timers
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -221,13 +222,14 @@ export default function Dashboard() {
   };
 
   const getLocationImage = async (locationName: string, lat?: number, lng?: number): Promise<string> => {
-    // Try to fetch image from API first (with Unsplash integration)
+    // Try to fetch image from API first (Google Places photos)
     if (lat && lng) {
       try {
         const response = await fetch(`/api/place-details?name=${encodeURIComponent(locationName)}&lat=${lat}&lng=${lng}`);
         const data = await response.json();
-        if (data.image) {
-          return data.image;
+        // Use first photo from Google Places if available
+        if (data.photos && data.photos.length > 0) {
+          return data.photos[0];
         }
       } catch (error) {
         console.error('Error fetching image from API:', error);
@@ -267,19 +269,31 @@ export default function Dashboard() {
     
     let lat = destinationLat + (Math.random() - 0.5) * 0.1;
     let lng = destinationLng + (Math.random() - 0.5) * 0.1;
+    let imageUrl = '';
     
     try {
-      const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(placeName));
+      // Try Google Places search first for better accuracy
+      const response = await fetch('/api/landmarks/google-search?q=' + encodeURIComponent(placeName));
       const data = await response.json();
+      console.log('Google search result for', placeName, ':', data.landmarks?.[0]);
       if (data.landmarks && data.landmarks.length !== 0 && data.landmarks[0].latitude && data.landmarks[0].longitude) {
         lat = data.landmarks[0].latitude;
         lng = data.landmarks[0].longitude;
+        // Use photo from search if available
+        imageUrl = data.landmarks[0].photo || '';
+        console.log('Using photo from search:', imageUrl);
       }
     } catch (error) {
       console.error('Error fetching coordinates:', error);
     }
     
-    const imageUrl = await getLocationImage(placeName, lat, lng);
+    // Get image if not already set
+    if (!imageUrl) {
+      console.log('No photo from search, fetching place details for', placeName);
+      imageUrl = await getLocationImage(placeName, lat, lng);
+      console.log('Got image from place details:', imageUrl);
+    }
+    
     const newLocation: Location = {
       id: Date.now().toString(),
       name: placeName,
@@ -298,6 +312,26 @@ export default function Dashboard() {
     } else {
       setLocations([...locations, newLocation]);
     }
+  };
+
+  const handleAddFromMap = async (placeName: string, lat: number, lng: number) => {
+    // Get image using place details which has better photo quality
+    const imageUrl = await getLocationImage(placeName, lat, lng);
+    
+    // Find the last day with locations, or use day 1
+    const existingDays = [...new Set(locations.map(loc => loc.day))].sort((a, b) => b - a);
+    const targetDay = existingDays.length > 0 ? existingDays[0] : 1;
+    
+    const newLocation: Location = {
+      id: Date.now().toString(),
+      name: placeName,
+      lat: lat,
+      lng: lng,
+      image: imageUrl,
+      day: targetDay,
+      notes: '',
+    };
+    setLocations([...locations, newLocation]);
   };
 
   const handleDeleteLocation = (locationId: string) => {
@@ -393,8 +427,7 @@ export default function Dashboard() {
     if (value.trim().length > 1) {
       searchDebounceRef.current = setTimeout(async () => {
         try {
-          const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
-          const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
+          const response = await fetch('/api/landmarks/google-search?q=' + encodeURIComponent(value));
           const data = await response.json();
           
           // API now handles all intelligent sorting, filtering, and scoring
@@ -424,8 +457,7 @@ export default function Dashboard() {
     if (value.trim().length > 1) {
       bottomSearchDebounceRef.current[day] = setTimeout(async () => {
         try {
-          const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
-          const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
+          const response = await fetch('/api/landmarks/google-search?q=' + encodeURIComponent(value));
           const data = await response.json();
           
           // API handles all intelligent sorting and filtering
@@ -456,8 +488,7 @@ export default function Dashboard() {
     if (value.trim().length > 1) {
       insertSearchDebounceRef.current[key] = setTimeout(async () => {
         try {
-          const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
-          const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value) + countryParam);
+          const response = await fetch('/api/landmarks/google-search?q=' + encodeURIComponent(value));
           const data = await response.json();
           
           // API handles all intelligent sorting and filtering
@@ -487,32 +518,37 @@ export default function Dashboard() {
     if (value.trim().length > 1) {
       destinationDebounceRef.current = setTimeout(async () => {
         try {
-          const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(value));
+          const response = await fetch('/api/landmarks/google-search?q=' + encodeURIComponent(value));
           const data = await response.json();
           // Filter to only show large locations (countries, states, regions) - NO cities or smaller
           const suggestions = data.landmarks
             .filter((l: any) => {
-              const addresstype = (l.addresstype || '').toLowerCase();
-              const type = (l.type || '').toLowerCase();
+              const types = (l.types || []).map((t: string) => t.toLowerCase());
+              const name = (l.name || '').toLowerCase();
               
-              // Only allow: country, state, region (administrative level 2-4)
-              const isLargeLocation = addresstype === 'country' || 
-                                     addresstype === 'state' || 
-                                     addresstype === 'region' ||
-                                     type === 'administrative';
+              // For Google Places API, check types array
+              // Country-level results
+              const isCountry = types.includes('country') || types.includes('administrative_area_level_1');
               
-              // Exclude cities, towns, villages, and smaller
-              const isSmallLocation = addresstype === 'city' || 
-                                     addresstype === 'town' || 
-                                     addresstype === 'village' ||
-                                     addresstype === 'municipality' ||
-                                     addresstype === 'county' ||
-                                     type === 'city';
+              // State/region level
+              const isRegion = types.includes('administrative_area_level_1') || 
+                              types.includes('administrative_area_level_2');
               
-              return isLargeLocation && !isSmallLocation;
+              // Exclude cities and smaller
+              const isCity = types.includes('locality') || 
+                            types.includes('sublocality') ||
+                            types.includes('neighborhood') ||
+                            types.includes('premise');
+              
+              // For simple queries like "japan", "france", allow all results
+              if (value.trim().length < 8 && !isCity) {
+                return true;
+              }
+              
+              return (isCountry || isRegion) && !isCity;
             })
             .map((l: any) => l.name);
-          setDestinationSuggestions(suggestions.slice(0, 3));
+          setDestinationSuggestions(suggestions.slice(0, 5));
           setShowDestinationSuggestions(suggestions.length !== 0);
         } catch (error) {
           console.error('Error searching destinations:', error);
@@ -532,7 +568,7 @@ export default function Dashboard() {
     
     // Fetch coordinates for the destination
     try {
-      const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(dest));
+      const response = await fetch('/api/landmarks/google-search?q=' + encodeURIComponent(dest));
       const data = await response.json();
       if (data.landmarks && data.landmarks.length > 0) {
         const location = data.landmarks[0];
@@ -656,10 +692,34 @@ export default function Dashboard() {
 
       <div className="flex-1 relative">
         <div className="absolute inset-0">
-          <MapComponent landmarks={locations} selectedLandmark={selectedLocation} />
+          <MapComponent 
+            landmarks={locations} 
+            selectedLandmark={selectedLocation} 
+            onAddToItinerary={handleAddFromMap}
+          />
         </div>
 
-        <div className="absolute top-5 left-5 bottom-5 w-96 min-w-[384px] bg-zinc-900 bg-opacity-95 backdrop-blur-3xl border border-zinc-800 border-opacity-50 flex flex-col shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] rounded-3xl z-[1000]" style={{overflow: 'visible'}}>
+        <div 
+          className={`absolute top-5 left-5 bottom-5 backdrop-blur-3xl border border-zinc-800 border-opacity-50 flex flex-col shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] rounded-3xl z-[1000] transition-all duration-500 ease-in-out ${sidebarCollapsed ? 'w-0 border-0 bg-transparent' : 'w-96 min-w-[384px] bg-zinc-900 bg-opacity-95'}`}
+          style={{overflow: 'visible'}}
+        >
+          {/* Minimize Button */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-4 top-1/2 -translate-y-1/2 w-8 h-16 bg-zinc-900 bg-opacity-95 backdrop-blur-xl border border-zinc-800 border-opacity-50 rounded-r-2xl flex items-center justify-center hover:bg-zinc-800 transition-all duration-300 shadow-lg group z-[1001]"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <svg 
+              className={`w-4 h-4 text-stone-400 group-hover:text-orange-400 transition-all duration-500 ${sidebarCollapsed ? 'rotate-180' : ''}`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <div className={`transition-opacity duration-300 flex flex-col h-full ${sidebarCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           {(destination || tripName) && (
             <div className="relative h-48 border-b border-zinc-800 border-opacity-50 overflow-hidden rounded-t-3xl">
               {destinationImage ? (
@@ -754,7 +814,7 @@ export default function Dashboard() {
                               if (searchInput.trim().length > 1) {
                                 try {
                                   const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
-                                  const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(searchInput) + countryParam);
+                                  const response = await fetch('/api/landmarks/google-search?q=' + encodeURIComponent(searchInput));
                                   const data = await response.json();
                                   
                                   const queryLower = searchInput.toLowerCase();
@@ -979,6 +1039,33 @@ export default function Dashboard() {
                                                   ))}
                                                 </div>
                                                 <span className="text-white font-semibold text-sm">{placeDetailsCache[location.id].rating.toFixed(1)}</span>
+                                                {placeDetailsCache[location.id].totalRatings && (
+                                                  <span className="text-stone-400 text-xs">({placeDetailsCache[location.id].totalRatings.toLocaleString()} reviews)</span>
+                                                )}
+                                              </div>
+                                            )}
+                                            
+                                            {placeDetailsCache[location.id].photos && placeDetailsCache[location.id].photos.length > 0 && (
+                                              <div className="space-y-2">
+                                                <h4 className="text-white font-semibold text-xs flex items-center gap-1.5">
+                                                  <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                  </svg>
+                                                  Photos
+                                                </h4>
+                                                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-orange-500 scrollbar-track-transparent">
+                                                  {placeDetailsCache[location.id].photos.map((photoUrl: string, idx: number) => (
+                                                    <div key={idx} className="flex-shrink-0 w-28 h-20 rounded-lg overflow-hidden bg-zinc-800 border border-zinc-700 border-opacity-30">
+                                                      <Image
+                                                        src={photoUrl}
+                                                        alt={`${location.name} photo ${idx + 1}`}
+                                                        width={112}
+                                                        height={80}
+                                                        className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
+                                                      />
+                                                    </div>
+                                                  ))}
+                                                </div>
                                               </div>
                                             )}
                                             
@@ -1019,6 +1106,41 @@ export default function Dashboard() {
                                                 <p className="text-stone-300 text-xs">{placeDetailsCache[location.id].phone}</p>
                                               </div>
                                             )}
+                                            
+                                            {placeDetailsCache[location.id].address && (
+                                              <div className="flex items-start gap-2">
+                                                <svg className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                </svg>
+                                                <p className="text-stone-300 text-xs">{placeDetailsCache[location.id].address}</p>
+                                              </div>
+                                            )}
+                                            
+                                            <div className="flex flex-wrap gap-2">
+                                              {placeDetailsCache[location.id].isOpen !== undefined && (
+                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${
+                                                  placeDetailsCache[location.id].isOpen 
+                                                    ? 'bg-green-500 bg-opacity-20 text-green-400 border border-green-500 border-opacity-30' 
+                                                    : 'bg-red-500 bg-opacity-20 text-red-400 border border-red-500 border-opacity-30'
+                                                }`}>
+                                                  <div className={`w-1.5 h-1.5 rounded-full ${placeDetailsCache[location.id].isOpen ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                                                  {placeDetailsCache[location.id].isOpen ? 'Open Now' : 'Closed'}
+                                                </span>
+                                              )}
+                                              
+                                              {placeDetailsCache[location.id].priceLevel && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-orange-500 bg-opacity-20 text-orange-400 border border-orange-500 border-opacity-30">
+                                                  {'$'.repeat(placeDetailsCache[location.id].priceLevel)}
+                                                </span>
+                                              )}
+                                              
+                                              {placeDetailsCache[location.id].types && placeDetailsCache[location.id].types.slice(0, 3).map((type: string, idx: number) => (
+                                                <span key={idx} className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-medium bg-zinc-700 bg-opacity-40 text-stone-300 border border-zinc-600 border-opacity-30">
+                                                  {type.replace(/_/g, ' ')}
+                                                </span>
+                                              ))}
+                                            </div>
                                             
                                             {placeDetailsCache[location.id].reviews && placeDetailsCache[location.id].reviews.length > 0 && (
                                               <div className="pt-2 border-t border-zinc-700 border-opacity-40">
@@ -1163,7 +1285,7 @@ export default function Dashboard() {
                                   if (input && input.trim().length > 1) {
                                     try {
                                       const countryParam = destination ? `&country=${encodeURIComponent(destination)}` : '';
-                                      const response = await fetch('/api/landmarks/search?q=' + encodeURIComponent(input) + countryParam);
+                                      const response = await fetch('/api/landmarks/google-search?q=' + encodeURIComponent(input));
                                       const data = await response.json();
                                       
                                       const queryLower = input.toLowerCase();
@@ -1198,6 +1320,7 @@ export default function Dashboard() {
                 </div>
               );
             })}
+          </div>
           </div>
         </div>
       </div>

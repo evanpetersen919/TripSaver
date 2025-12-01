@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Using Unsplash API for better images
-const UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY || '';
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -9,119 +8,110 @@ export async function GET(request: NextRequest) {
   const lat = searchParams.get('lat');
   const lng = searchParams.get('lng');
 
-  if (!placeName) {
-    return NextResponse.json({ error: 'Place name is required' }, { status: 400 });
+  if (!placeName || !lat || !lng) {
+    return NextResponse.json({ error: 'Place name, lat, and lng are required' }, { status: 400 });
   }
 
   try {
-    // Fetch better image from Unsplash
-    let imageUrl = `https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=300&fit=crop&q=80`;
+    // Step 1: Find the place using new Places API Text Search
+    const searchUrl = `https://places.googleapis.com/v1/places:searchText`;
     
-    if (UNSPLASH_ACCESS_KEY) {
-      try {
-        const unsplashResponse = await fetch(
-          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(placeName + ' landmark')}&per_page=1&orientation=landscape`,
-          {
-            headers: {
-              'Authorization': `Client-ID ${UNSPLASH_ACCESS_KEY}`
-            }
-          }
-        );
-        
-        if (unsplashResponse.ok) {
-          const unsplashData = await unsplashResponse.json();
-          if (unsplashData.results && unsplashData.results.length > 0) {
-            imageUrl = unsplashData.results[0].urls.regular + '?w=400&h=300&fit=crop';
+    const searchResponse = await fetch(searchUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+        'X-Goog-FieldMask': 'places.id,places.displayName'
+      },
+      body: JSON.stringify({
+        textQuery: placeName,
+        locationBias: {
+          circle: {
+            center: {
+              latitude: parseFloat(lat),
+              longitude: parseFloat(lng)
+            },
+            radius: 500.0
           }
         }
-      } catch (error) {
-        console.error('Unsplash API error:', error);
-      }
+      })
+    });
+
+    const searchData = await searchResponse.json();
+
+    if (!searchData.places || searchData.places.length === 0) {
+      // Fallback to basic data if place not found
+      return NextResponse.json({
+        name: placeName,
+        rating: null,
+        totalRatings: 0,
+        description: '',
+        openingHours: '',
+        website: '',
+        phone: '',
+        photos: [],
+        reviews: [],
+        priceLevel: null,
+        types: [],
+        address: ''
+      });
     }
 
-    // Fetch reviews/details from Overpass API (OpenStreetMap)
-    let reviews: any[] = [];
-    let rating = null;
-    let description = '';
+    const placeId = searchData.places[0].id;
+
+    // Step 2: Get detailed information using new Place Details API
+    const detailsUrl = `https://places.googleapis.com/v1/${placeId}`;
+    
+    const detailsResponse = await fetch(detailsUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+        'X-Goog-FieldMask': 'displayName,rating,userRatingCount,formattedAddress,internationalPhoneNumber,websiteUri,regularOpeningHours,priceLevel,reviews,photos,types,editorialSummary,currentOpeningHours'
+      }
+    });
+
+    const detailsData = await detailsResponse.json();
+
+    if (!detailsData.displayName) {
+      return NextResponse.json({ error: 'Failed to fetch place details' }, { status: 500 });
+    }
+
+    // Extract photos (up to 5)
+    const photos = (detailsData.photos || []).slice(0, 5).map((photo: any) => {
+      const photoName = photo.name;
+      return `https://places.googleapis.com/v1/${photoName}/media?key=${GOOGLE_MAPS_API_KEY}&maxWidthPx=800`;
+    });
+
+    // Extract reviews (up to 5)
+    const reviews = (detailsData.reviews || []).slice(0, 5).map((review: any) => ({
+      author: review.authorAttribution?.displayName || 'Anonymous',
+      rating: review.rating || 0,
+      text: review.text?.text || '',
+      date: review.relativePublishTimeDescription || '',
+      profilePhoto: review.authorAttribution?.photoUri || ''
+    }));
+
+    // Format opening hours
     let openingHours = '';
-    let website = '';
-    let phone = '';
-
-    if (lat && lng) {
-      try {
-        // Search for POI near the coordinates
-        const overpassQuery = `
-          [out:json];
-          (
-            node(around:100,${lat},${lng})[name~"${placeName}",i];
-            way(around:100,${lat},${lng})[name~"${placeName}",i];
-            relation(around:100,${lat},${lng})[name~"${placeName}",i];
-          );
-          out body;
-        `;
-        
-        const overpassResponse = await fetch(
-          'https://overpass-api.de/api/interpreter',
-          {
-            method: 'POST',
-            body: overpassQuery,
-            headers: {
-              'Content-Type': 'text/plain'
-            }
-          }
-        );
-
-        if (overpassResponse.ok) {
-          const overpassData = await overpassResponse.json();
-          if (overpassData.elements && overpassData.elements.length > 0) {
-            const element = overpassData.elements[0];
-            const tags = element.tags || {};
-            
-            description = tags.description || tags['description:en'] || tags.note || '';
-            openingHours = tags.opening_hours || '';
-            website = tags.website || tags.url || '';
-            phone = tags.phone || tags['contact:phone'] || '';
-            
-            // Some POIs have ratings in OSM
-            if (tags.stars) {
-              rating = parseFloat(tags.stars);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Overpass API error:', error);
-      }
-    }
-
-    // For demo purposes, generate some sample reviews if we don't have real ones
-    // In production, you'd want to integrate with Google Places API or TripAdvisor
-    if (reviews.length === 0) {
-      reviews = [
-        {
-          author: 'Travel Enthusiast',
-          rating: 5,
-          text: 'Amazing place! Highly recommend visiting during sunset for the best experience.',
-          date: 'Recent review'
-        },
-        {
-          author: 'Adventure Seeker',
-          rating: 4,
-          text: 'Great landmark with lots of history. Can get crowded during peak season.',
-          date: 'Recent review'
-        }
-      ];
-      rating = 4.5;
+    if (detailsData.regularOpeningHours?.weekdayDescriptions) {
+      openingHours = detailsData.regularOpeningHours.weekdayDescriptions.join('\n');
     }
 
     return NextResponse.json({
-      name: placeName,
-      image: imageUrl,
-      rating: rating,
-      description: description,
+      name: detailsData.displayName?.text || placeName,
+      rating: detailsData.rating || null,
+      totalRatings: detailsData.userRatingCount || 0,
+      description: detailsData.editorialSummary?.text || '',
+      address: detailsData.formattedAddress || '',
       openingHours: openingHours,
-      website: website,
-      phone: phone,
-      reviews: reviews
+      website: detailsData.websiteUri || '',
+      phone: detailsData.internationalPhoneNumber || '',
+      photos: photos,
+      reviews: reviews,
+      priceLevel: detailsData.priceLevel ? ['FREE', 'INEXPENSIVE', 'MODERATE', 'EXPENSIVE', 'VERY_EXPENSIVE'].indexOf(detailsData.priceLevel) : null,
+      types: detailsData.types || [],
+      isOpen: detailsData.currentOpeningHours?.openNow
     });
 
   } catch (error) {

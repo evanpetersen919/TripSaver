@@ -25,25 +25,26 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Custom scrollbar styling */
+/* Modern custom scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #27272a;
-  border-radius: 4px;
+  background: transparent;
+  margin: 8px 0;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #52525b;
-  border-radius: 4px;
-  transition: background 0.2s;
+  background: linear-gradient(180deg, #fb923c 0%, #f97316 100%);
+  border-radius: 10px;
+  transition: all 0.3s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+  background: linear-gradient(180deg, #fdba74 0%, #fb923c 100%);
+  box-shadow: 0 0 8px rgba(251, 146, 60, 0.4);
 }
 
 /* Calendar styling - orange theme */
