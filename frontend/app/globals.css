@@ -102,3 +102,44 @@ body {
   animation: slideDown 0.3s ease-out forwards;
 }
 
+/* Leaflet popup custom styling - remove white box */
+.leaflet-popup-content-wrapper {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  position: relative !important;
+}
+
+.leaflet-popup-content-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 10px solid rgba(24, 24, 27, 0.9);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  width: auto !important;
+}
+
+.leaflet-popup-tip-container {
+  display: none !important;
+}
+
+.leaflet-popup {
+  margin-bottom: 30px !important;
+}
+
+.leaflet-popup a.leaflet-popup-close-button {
+  display: none !important;
+}
+
