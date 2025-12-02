@@ -141,6 +141,8 @@ export default function Dashboard() {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [currentPhotos, setCurrentPhotos] = useState<string[]>([]);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareableLink, setShareableLink] = useState('');
   
   // Debounce timers
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -462,6 +464,50 @@ export default function Dashboard() {
     ));
   };
 
+  // Share functionality
+  const generateShareableId = () => {
+    return 'trip-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  };
+
+  const handleShare = () => {
+    // Generate unique ID for this itinerary
+    const shareId = generateShareableId();
+    
+    // Prepare itinerary data
+    const itineraryData = {
+      id: shareId,
+      tripName,
+      destination,
+      destinationImage,
+      destinationLat,
+      destinationLng,
+      startDate,
+      endDate,
+      locations,
+      daySubheadings,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Save to localStorage
+    localStorage.setItem(`itinerary-${shareId}`, JSON.stringify(itineraryData));
+    
+    // Generate shareable link
+    const baseUrl = window.location.origin;
+    const shareLink = `${baseUrl}/itinerary/${shareId}`;
+    setShareableLink(shareLink);
+    setShowShareModal(true);
+  };
+
+  const handleCopyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareableLink);
+      setCopiedItem('shareLink');
+      setTimeout(() => setCopiedItem(null), 1000);
+    } catch (error) {
+      console.error('Failed to copy link:', error);
+    }
+  };
+
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
     
@@ -729,7 +775,10 @@ export default function Dashboard() {
               </button>
             )}
           </div>
-          <button className="text-stone-400 hover:text-stone-300 px-3 py-1.5 transition-colors text-sm">
+          <button 
+            onClick={handleShare}
+            className="text-stone-400 hover:text-stone-300 hover:text-orange-400 px-3 py-1.5 transition-colors text-sm"
+          >
             Share
           </button>
         </div>
@@ -1798,6 +1847,73 @@ export default function Dashboard() {
                 {selectedPhotoIndex + 1} / {currentPhotos.length}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div 
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-transparent backdrop-blur-md"
+          onClick={() => setShowShareModal(false)}
+        >
+          <div 
+            className="relative bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md p-6 animate-scaleIn border border-zinc-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setShowShareModal(false)}
+              className="absolute top-4 right-4 text-stone-400 hover:text-white transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Modal Content */}
+            <div className="space-y-4">
+              <h3 className="text-2xl font-bold text-white">Share Your Itinerary</h3>
+              <p className="text-stone-400 text-sm">Copy the link below to share your travel plans with others. They'll be able to view your itinerary in read-only mode.</p>
+              
+              {/* Shareable Link Display */}
+              <div className="bg-zinc-800 rounded-lg p-4 border border-zinc-700">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 overflow-hidden">
+                    <p className="text-xs text-stone-500 mb-1">Shareable Link</p>
+                    <p className="text-white text-sm font-mono truncate">{shareableLink}</p>
+                  </div>
+                  <button
+                    onClick={handleCopyShareLink}
+                    className={`px-4 py-2 rounded-lg transition-all ${
+                      copiedItem === 'shareLink' 
+                        ? 'bg-orange-500 text-white animate-bounce' 
+                        : 'bg-orange-600 hover:bg-orange-500 text-white'
+                    }`}
+                  >
+                    {copiedItem === 'shareLink' ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Info Note */}
+              <div className="bg-zinc-800 bg-opacity-50 rounded-lg p-3 border border-zinc-700 border-opacity-50">
+                <div className="flex gap-2">
+                  <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-stone-400 text-xs">This link will remain valid as long as your browser storage is not cleared. Anyone with this link can view your itinerary.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
