@@ -111,6 +111,9 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
   // State for clicked location (not in itinerary)
   const [clickedPlace, setClickedPlace] = useState<{ lat: number; lng: number; name: string; id: string } | null>(null);
   const [loadingClickedPlace, setLoadingClickedPlace] = useState(false);
+  const [modalClickedPlace, setModalClickedPlace] = useState<{ lat: number; lng: number; name: string; id: string } | null>(null);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
+  const [currentPhotos, setCurrentPhotos] = useState<string[]>([]);
 
   const locationsByDay: { [key: number]: Location[] } = {};
   landmarks.forEach(loc => {
@@ -279,7 +282,7 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
           }
         }}
         onCameraChanged={(ev) => {
-          if (ev.map && !map) setMap(ev.map);
+          if (ev.map) setMap(ev.map);
         }}
         style={{ width: '100%', height: '100%' }}
       >
@@ -404,6 +407,21 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
             headerDisabled
           >
             <div className="min-w-[220px] max-w-[280px] bg-zinc-900 bg-opacity-95 rounded-2xl shadow-2xl p-0 overflow-hidden relative">
+              {/* Maximize button */}
+              <button
+                onClick={() => {
+                  setModalClickedPlace(clickedPlace);
+                  fetchPlaceDetails(clickedPlace.id, clickedPlace.name, clickedPlace.lat, clickedPlace.lng);
+                }}
+                className="absolute top-2 right-[34px] z-10 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full p-1 transition-all"
+                style={{ width: '24px', height: '24px' }}
+                title="Maximize"
+              >
+                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              </button>
+              
               {/* Close button */}
               <button
                 onClick={() => {
@@ -439,7 +457,7 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
                           {[...Array(5)].map((_, i) => (
                             <svg
                               key={i}
-                              className={`w-3 h-3 ${i < Math.floor(placeDetails[clickedPlace.id].rating) ? 'text-yellow-400' : 'text-gray-600'}`}
+                              className={`w-4 h-4 ${i < Math.floor(placeDetails[clickedPlace.id].rating) ? 'text-yellow-400' : 'text-gray-600'}`}
                               fill="currentColor"
                               viewBox="0 0 20 20"
                             >
@@ -447,9 +465,9 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
                             </svg>
                           ))}
                         </div>
-                        <span className="text-white font-semibold text-xs">{placeDetails[clickedPlace.id].rating.toFixed(1)}</span>
+                        <span className="text-white font-semibold text-sm">{placeDetails[clickedPlace.id].rating.toFixed(1)}</span>
                         {placeDetails[clickedPlace.id].totalRatings && (
-                          <span className="text-stone-400 text-[10px]">({placeDetails[clickedPlace.id].totalRatings.toLocaleString()})</span>
+                          <span className="text-stone-400 text-xs">({placeDetails[clickedPlace.id].totalRatings.toLocaleString()})</span>
                         )}
                       </div>
                     )}
@@ -471,25 +489,25 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
                     )}
                     
                     {placeDetails[clickedPlace.id].description && (
-                      <p className="text-stone-300 text-[10px] leading-relaxed">{placeDetails[clickedPlace.id].description.slice(0, 150)}...</p>
+                      <p className="text-stone-300 text-xs leading-relaxed">{placeDetails[clickedPlace.id].description.slice(0, 150)}...</p>
                     )}
                     
                     {placeDetails[clickedPlace.id].openingHours && (
                       <div className="flex items-start gap-1.5">
-                        <svg className="w-3 h-3 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <p className="text-stone-300 text-[10px]">{placeDetails[clickedPlace.id].openingHours}</p>
+                        <p className="text-stone-300 text-xs">{placeDetails[clickedPlace.id].openingHours}</p>
                       </div>
                     )}
                     
                     {placeDetails[clickedPlace.id].address && (
                       <div className="flex items-start gap-1.5">
-                        <svg className="w-3 h-3 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <p className="text-stone-300 text-[10px]">{placeDetails[clickedPlace.id].address}</p>
+                        <p className="text-stone-300 text-xs">{placeDetails[clickedPlace.id].address}</p>
                       </div>
                     )}
                     
@@ -498,9 +516,9 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
                         href={placeDetails[clickedPlace.id].website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-orange-400 hover:text-orange-300 text-[10px] transition-colors"
+                        className="flex items-center gap-1.5 text-orange-400 hover:text-orange-300 text-xs transition-colors"
                       >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
                         Visit Website
@@ -539,6 +557,236 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
           </div>
         )}
       </Map>
+      
+      {/* Modal for clicked places */}
+      {modalClickedPlace && (
+        <>
+          <div 
+            className="fixed inset-0 bg-transparent backdrop-blur-md z-[10000] animate-fadeIn"
+            onClick={() => setModalClickedPlace(null)}
+          />
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 pointer-events-none">
+            <div 
+              className="bg-zinc-900 bg-opacity-95 rounded-2xl shadow-2xl w-[70%] max-w-3xl max-h-[75vh] overflow-y-auto pointer-events-auto animate-scaleIn border border-zinc-700 border-opacity-40 relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setModalClickedPlace(null)}
+                className="absolute top-4 right-4 z-10 w-10 h-10 bg-zinc-800 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:scale-110"
+              >
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              
+              <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600">
+                <span className="text-white font-bold text-sm rounded-full px-3 py-1.5 shadow" style={{ backgroundColor: 'rgba(0,0,0,0.18)' }}>
+                  New Place
+                </span>
+              </div>
+              
+              <div className="px-6 py-5">
+                <h2 className="text-white text-2xl font-bold mb-4">{modalClickedPlace.name}</h2>
+                
+                {loadingDetails === modalClickedPlace.id ? (
+                  <div className="py-12 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-orange-500"></div>
+                  </div>
+                ) : placeDetails[modalClickedPlace.id] ? (
+                  <div className="space-y-4">
+                    {placeDetails[modalClickedPlace.id].rating && (
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          {[...Array(5)].map((_, i) => (
+                            <svg
+                              key={i}
+                              className={`w-5 h-5 ${i < Math.floor(placeDetails[modalClickedPlace.id].rating) ? 'text-yellow-400' : 'text-gray-600'}`}
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                          ))}
+                        </div>
+                        <span className="text-white font-semibold text-lg">{placeDetails[modalClickedPlace.id].rating.toFixed(1)}</span>
+                        {placeDetails[modalClickedPlace.id].totalRatings && (
+                          <span className="text-stone-400 text-sm">({placeDetails[modalClickedPlace.id].totalRatings.toLocaleString()} reviews)</span>
+                        )}
+                      </div>
+                    )}
+                    
+                    {placeDetails[modalClickedPlace.id].photos && placeDetails[modalClickedPlace.id].photos.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-white font-semibold text-sm flex items-center gap-2">
+                          <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          Photos
+                        </h4>
+                        <div className="grid grid-cols-3 gap-2">
+                          {placeDetails[modalClickedPlace.id].photos.slice(0, 6).map((photoUrl: string, idx: number) => (
+                            <div 
+                              key={idx} 
+                              className="aspect-video rounded-lg overflow-hidden bg-zinc-800 border border-zinc-700 border-opacity-30 cursor-pointer hover:scale-105 transition-transform"
+                              onClick={() => {
+                                setCurrentPhotos(placeDetails[modalClickedPlace.id].photos);
+                                setSelectedPhotoIndex(idx);
+                              }}
+                            >
+                              <Image
+                                src={photoUrl}
+                                alt={`${modalClickedPlace.name} photo ${idx + 1}`}
+                                width={200}
+                                height={150}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {placeDetails[modalClickedPlace.id].description && (
+                      <div className="bg-zinc-800 bg-opacity-50 rounded-xl p-4 border border-zinc-700 border-opacity-30">
+                        <p className="text-stone-300 text-sm leading-relaxed">{placeDetails[modalClickedPlace.id].description}</p>
+                      </div>
+                    )}
+                    
+                    <div className="grid grid-cols-1 gap-3">
+                      {placeDetails[modalClickedPlace.id].openingHours && (
+                        <div className="flex items-start gap-2">
+                          <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <p className="text-stone-300 text-sm">{placeDetails[modalClickedPlace.id].openingHours}</p>
+                        </div>
+                      )}
+                      
+                      {placeDetails[modalClickedPlace.id].phone && (
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          <p className="text-stone-300 text-sm">{placeDetails[modalClickedPlace.id].phone}</p>
+                        </div>
+                      )}
+                      
+                      {placeDetails[modalClickedPlace.id].address && (
+                        <div className="flex items-start gap-2">
+                          <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <p className="text-stone-300 text-sm">{placeDetails[modalClickedPlace.id].address}</p>
+                        </div>
+                      )}
+                      
+                      {placeDetails[modalClickedPlace.id].website && (
+                        <a
+                          href={placeDetails[modalClickedPlace.id].website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-orange-400 hover:text-orange-300 text-sm transition-colors"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          Visit Website
+                        </a>
+                      )}
+                    </div>
+                    
+                    {onAddToItinerary && (
+                      <button
+                        onClick={() => {
+                          onAddToItinerary(modalClickedPlace.name, modalClickedPlace.lat, modalClickedPlace.lng);
+                          setModalClickedPlace(null);
+                          setClickedPlace(null);
+                          setOpenInfoWindowId(null);
+                        }}
+                        className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-medium rounded-xl transition-all hover:scale-105 flex items-center justify-center gap-2 mt-4"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add to Itinerary
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          
+          {/* Photo viewer modal */}
+          {currentPhotos.length > 0 && (
+            <div 
+              className="fixed inset-0 z-[20000] flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm" 
+              onClick={() => setCurrentPhotos([])}
+            >
+              <div className="relative max-w-7xl max-h-[90vh] w-full px-4">
+                {/* Close Button */}
+                <button
+                  onClick={() => setCurrentPhotos([])}
+                  className="absolute top-4 right-4 w-12 h-12 bg-zinc-800 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:scale-110 z-10"
+                >
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                
+                {/* Left Arrow */}
+                {currentPhotos.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPhotoIndex((selectedPhotoIndex - 1 + currentPhotos.length) % currentPhotos.length);
+                    }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-zinc-800 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:scale-110 z-10"
+                  >
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                )}
+                
+                {/* Right Arrow */}
+                {currentPhotos.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPhotoIndex((selectedPhotoIndex + 1) % currentPhotos.length);
+                    }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-zinc-800 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:scale-110 z-10"
+                  >
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )}
+                
+                <div className="relative w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                  <Image
+                    src={currentPhotos[selectedPhotoIndex]}
+                    alt={`Photo ${selectedPhotoIndex + 1} of ${currentPhotos.length}`}
+                    width={1200}
+                    height={800}
+                    quality={100}
+                    className="max-w-full max-h-[90vh] w-auto h-auto object-contain rounded-2xl"
+                  />
+                </div>
+                
+                {/* Photo Counter */}
+                {currentPhotos.length > 1 && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-zinc-800 bg-opacity-80 backdrop-blur-sm rounded-full text-white text-sm font-medium">
+                    {selectedPhotoIndex + 1} / {currentPhotos.length}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </APIProvider>
   );
 }

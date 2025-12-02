@@ -137,6 +137,10 @@ export default function Dashboard() {
   const [placeDetailsCache, setPlaceDetailsCache] = useState<{ [key: string]: any }>({});
   const [loadingPlaceDetails, setLoadingPlaceDetails] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [modalLocation, setModalLocation] = useState<Location | null>(null);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  const [currentPhotos, setCurrentPhotos] = useState<string[]>([]);
+  const [copiedItem, setCopiedItem] = useState<string | null>(null);
   
   // Debounce timers
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -212,10 +216,51 @@ export default function Dashboard() {
     try {
       const response = await fetch(`/api/place-details?name=${encodeURIComponent(locationName)}&lat=${lat}&lng=${lng}`);
       const data = await response.json();
-      setPlaceDetailsCache(prev => ({ ...prev, [locationId]: data }));
+      console.log('Place details for', locationName, ':', data);
+      
+      // Even if API fails, store basic info
+      if (!data.rating && !data.photos?.length) {
+        setPlaceDetailsCache(prev => ({ 
+          ...prev, 
+          [locationId]: {
+            name: locationName,
+            rating: null,
+            totalRatings: 0,
+            description: 'Details not available',
+            address: `${lat}, ${lng}`,
+            openingHours: '',
+            website: '',
+            phone: '',
+            photos: [],
+            reviews: [],
+            priceLevel: null,
+            types: [],
+            isOpen: null
+          }
+        }));
+      } else {
+        setPlaceDetailsCache(prev => ({ ...prev, [locationId]: data }));
+      }
     } catch (error) {
       console.error('Error fetching place details:', error);
-      setPlaceDetailsCache(prev => ({ ...prev, [locationId]: null }));
+      setPlaceDetailsCache(prev => ({ 
+        ...prev, 
+        [locationId]: {
+          name: locationName,
+          rating: null,
+          totalRatings: 0,
+          description: 'Failed to load details',
+          address: `${lat}, ${lng}`,
+          openingHours: '',
+          website: '',
+          phone: '',
+          photos: [],
+          reviews: [],
+          priceLevel: null,
+          types: [],
+          isOpen: null
+        }
+      }));
     } finally {
       setLoadingPlaceDetails(null);
     }
@@ -921,15 +966,15 @@ export default function Dashboard() {
                                   onDragStart={(e) => handleDragStart(e, location.id)}
                                   onDragOver={handleDragOver}
                                   onDrop={(e) => handleDrop(e, location.id, day)}
-                                  className={'rounded-3xl overflow-hidden transition-all duration-300 cursor-move ' + (
+                                  className={'rounded-3xl overflow-visible transition-all duration-300 cursor-grab active:cursor-grabbing active:border-2 active:border-orange-500 active:shadow-[0_0_20px_rgba(249,115,22,0.6)] active:animate-pulse ' + (
                                     selectedLocation?.id === location.id
                                       ? 'bg-orange-500 bg-opacity-20 border-2 border-orange-400 shadow-[0_8px_30px_rgb(249,115,22,0.4)] scale-[1.02]'
                                       : 'bg-zinc-800 bg-opacity-60 border border-zinc-700 border-opacity-40 hover:bg-opacity-70 hover:shadow-[0_8px_30px_rgb(0,0,0,0.4)] hover:scale-[1.01]'
-                                  )}
+                                  ) + (showMoreInfo === location.id ? ' min-h-[600px]' : '')}
                                 >
                                   {location.image && (
                                     <div
-                                      className="relative h-40 w-full cursor-pointer"
+                                      className="relative h-40 w-full cursor-pointer overflow-hidden rounded-t-3xl"
                                       onClick={() => setSelectedLocation(location)}
                                     >
                                       <img
@@ -990,34 +1035,48 @@ export default function Dashboard() {
                                       </button>
                                     )}
                                     
-                                    <button
-                                      onClick={() => {
-                                        if (showMoreInfo === location.id) {
-                                          setShowMoreInfo(null);
-                                        } else {
-                                          setShowMoreInfo(location.id);
-                                          fetchPlaceDetails(location.id, location.name, location.lat, location.lng);
-                                        }
-                                      }}
-                                      className="w-full mt-2 px-3 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-sm font-medium rounded-xl transition-all hover:scale-105 hover:shadow-lg flex items-center justify-center gap-2"
-                                    >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                      </svg>
-                                      {showMoreInfo === location.id ? 'Hide Info' : 'More Info'}
-                                      <svg 
-                                        className={`w-4 h-4 transition-transform duration-300 ${showMoreInfo === location.id ? 'rotate-180' : ''}`} 
-                                        fill="none" 
-                                        stroke="currentColor" 
-                                        viewBox="0 0 24 24"
+                                    <div className="flex gap-2 mt-2">
+                                      <button
+                                        onClick={() => {
+                                          if (showMoreInfo === location.id) {
+                                            setShowMoreInfo(null);
+                                          } else {
+                                            setShowMoreInfo(location.id);
+                                            fetchPlaceDetails(location.id, location.name, location.lat, location.lng);
+                                          }
+                                        }}
+                                        className="flex-1 px-3 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-sm font-medium rounded-xl transition-all hover:scale-105 hover:shadow-lg flex items-center justify-center gap-2"
                                       >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                      </svg>
-                                    </button>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        {showMoreInfo === location.id ? 'Hide Info' : 'More Info'}
+                                        <svg 
+                                          className={`w-4 h-4 transition-transform duration-300 ${showMoreInfo === location.id ? 'rotate-180' : ''}`} 
+                                          fill="none" 
+                                          stroke="currentColor" 
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setModalLocation(location);
+                                          fetchPlaceDetails(location.id, location.name, location.lat, location.lng);
+                                        }}
+                                        className="px-3 py-2 bg-zinc-700 bg-opacity-60 hover:bg-opacity-80 text-white text-sm font-medium rounded-xl transition-all hover:scale-105 hover:shadow-lg flex items-center justify-center"
+                                        title="Maximize"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                        </svg>
+                                      </button>
+                                    </div>
                                     
                                     {/* Expandable Details Section */}
                                     {showMoreInfo === location.id && (
-                                      <div className="mt-3 overflow-hidden animate-slideDown">
+                                      <div className="mt-3 overflow-y-auto max-h-[450px] animate-slideDown">
                                         {loadingPlaceDetails === location.id ? (
                                           <div className="py-6 flex items-center justify-center">
                                             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-orange-500"></div>
@@ -1121,8 +1180,8 @@ export default function Dashboard() {
                                               {placeDetailsCache[location.id].isOpen !== undefined && (
                                                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${
                                                   placeDetailsCache[location.id].isOpen 
-                                                    ? 'bg-green-500 bg-opacity-20 text-green-400 border border-green-500 border-opacity-30' 
-                                                    : 'bg-red-500 bg-opacity-20 text-red-400 border border-red-500 border-opacity-30'
+                                                    ? 'bg-green-500 bg-opacity-20 text-white border border-green-500 border-opacity-30' 
+                                                    : 'bg-red-500 bg-opacity-20 text-white border border-red-500 border-opacity-30'
                                                 }`}>
                                                   <div className={`w-1.5 h-1.5 rounded-full ${placeDetailsCache[location.id].isOpen ? 'bg-green-400' : 'bg-red-400'}`}></div>
                                                   {placeDetailsCache[location.id].isOpen ? 'Open Now' : 'Closed'}
@@ -1183,6 +1242,38 @@ export default function Dashboard() {
                                                 </div>
                                               </div>
                                             )}
+                                            
+                                            {/* Action Links */}
+                                            <div className="pt-3 mt-3 space-y-2">
+                                              <button
+                                                onClick={() => {
+                                                  const address = placeDetailsCache[location.id]?.address || `${location.lat},${location.lng}`;
+                                                  navigator.clipboard.writeText(address);
+                                                  setCopiedItem(`sidebar-copy-${location.id}`);
+                                                  setTimeout(() => setCopiedItem(null), 1000);
+                                                }}
+                                                className={`w-full text-left px-0 py-1.5 text-xs transition-colors flex items-center gap-2 ${
+                                                  copiedItem === `sidebar-copy-${location.id}` ? 'text-orange-400' : 'text-stone-400 hover:text-white'
+                                                }`}
+                                              >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                </svg>
+                                                {copiedItem === `sidebar-copy-${location.id}` ? '✓ Copied!' : 'Copy Address'}
+                                              </button>
+                                              
+                                              <a
+                                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.name)}&query=${location.lat},${location.lng}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="block px-0 py-1.5 text-stone-400 hover:text-white text-xs transition-colors flex items-center gap-2"
+                                              >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                </svg>
+                                                Open in Google Maps
+                                              </a>
+                                            </div>
                                           </div>
                                         ) : (
                                           <div className="py-4 text-center">
@@ -1324,6 +1415,392 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Modal for Maximized View */}
+      {modalLocation && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-transparent backdrop-blur-md animate-fadeIn" onClick={() => setModalLocation(null)}>
+          <div className="bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-700 w-[70%] max-w-3xl max-h-[75vh] overflow-hidden animate-scaleIn" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="relative h-48 bg-gradient-to-br from-zinc-800 to-zinc-900 border-b border-zinc-700">
+              {modalLocation.image && (
+                <Image
+                  src={modalLocation.image}
+                  alt={modalLocation.name}
+                  fill
+                  quality={95}
+                  className="object-cover opacity-60"
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent" />
+              <div className="absolute bottom-4 left-6 right-6">
+                <h2 className="text-3xl font-bold text-white drop-shadow-lg">{modalLocation.name}</h2>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="px-3 py-1 bg-orange-500 bg-opacity-20 backdrop-blur-sm text-white text-xs font-medium rounded-full border border-orange-500 border-opacity-30">
+                    Day {modalLocation.day}
+                  </span>
+                  {modalLocation.confidence && (
+                    <span className="px-3 py-1 bg-zinc-800 bg-opacity-80 backdrop-blur-sm text-white text-xs font-medium rounded-full">
+                      {(modalLocation.confidence * 100).toFixed(0)}% Match
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setModalLocation(null)}
+                className="absolute top-4 right-4 w-10 h-10 bg-zinc-800 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:scale-110"
+              >
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[calc(75vh-12rem)]">
+              {loadingPlaceDetails === modalLocation.id ? (
+                <div className="py-12 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
+                </div>
+              ) : placeDetailsCache[modalLocation.id] ? (
+                <div className="space-y-6">
+                  {placeDetailsCache[modalLocation.id].rating && (
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => (
+                          <svg
+                            key={i}
+                            className={`w-6 h-6 ${i < Math.floor(placeDetailsCache[modalLocation.id].rating) ? 'text-yellow-400' : 'text-gray-600'}`}
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        ))}
+                      </div>
+                      <span className="text-white font-semibold text-lg">{placeDetailsCache[modalLocation.id].rating.toFixed(1)}</span>
+                      {placeDetailsCache[modalLocation.id].totalRatings && (
+                        <span className="text-stone-400 text-sm">({placeDetailsCache[modalLocation.id].totalRatings.toLocaleString()} reviews)</span>
+                      )}
+                    </div>
+                  )}
+
+                  {placeDetailsCache[modalLocation.id].photos && placeDetailsCache[modalLocation.id].photos.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="text-white font-semibold text-lg flex items-center gap-2">
+                        <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Photos
+                      </h3>
+                      <div className="grid grid-cols-3 gap-3">
+                        {placeDetailsCache[modalLocation.id].photos.map((photoUrl: string, idx: number) => (
+                          <div 
+                            key={idx} 
+                            className="aspect-video rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700 cursor-pointer"
+                            onClick={() => {
+                              setCurrentPhotos(placeDetailsCache[modalLocation.id].photos);
+                              setSelectedPhotoIndex(idx);
+                            }}
+                          >
+                            <Image
+                              src={photoUrl}
+                              alt={`${modalLocation.name} photo ${idx + 1}`}
+                              width={400}
+                              height={300}
+                              className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {placeDetailsCache[modalLocation.id].description && (
+                    <div>
+                      <p className="text-stone-300 text-base leading-relaxed">{placeDetailsCache[modalLocation.id].description}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {placeDetailsCache[modalLocation.id].openingHours && (
+                      <div className="flex items-start gap-3 p-4 bg-zinc-800 bg-opacity-50 rounded-xl border border-zinc-700 border-opacity-40">
+                        <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <h4 className="text-white font-medium text-sm mb-1">Hours</h4>
+                          <p className="text-stone-300 text-sm whitespace-pre-line">{placeDetailsCache[modalLocation.id].openingHours}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {placeDetailsCache[modalLocation.id].address && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(placeDetailsCache[modalLocation.id].address);
+                          setCopiedItem('address');
+                          setTimeout(() => setCopiedItem(null), 1000);
+                        }}
+                        className={`flex items-start gap-3 p-4 rounded-xl transition-all duration-300 cursor-pointer w-full text-left group ${
+                          copiedItem === 'address'
+                            ? 'bg-zinc-800 bg-opacity-50 border-2 border-orange-500'
+                            : 'bg-zinc-800 bg-opacity-50 border border-zinc-700 border-opacity-40 hover:scale-105'
+                        }`}
+                      >
+                        <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <div className="flex-1">
+                          <h4 className="text-white font-medium text-sm mb-1 flex items-center gap-2">
+                            Address
+                            {copiedItem === 'address' && (
+                              <span className="text-green-400 text-xs animate-fadeIn">✓ Copied!</span>
+                            )}
+                          </h4>
+                          <p className="text-stone-300 text-sm">{placeDetailsCache[modalLocation.id].address}</p>
+                        </div>
+                        <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    )}
+
+                    {placeDetailsCache[modalLocation.id].phone && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(placeDetailsCache[modalLocation.id].phone);
+                          setCopiedItem('phone');
+                          setTimeout(() => setCopiedItem(null), 1000);
+                        }}
+                        className={`flex items-start gap-3 p-4 rounded-xl transition-all duration-300 cursor-pointer w-full text-left group ${
+                          copiedItem === 'phone'
+                            ? 'bg-zinc-800 bg-opacity-50 border-2 border-orange-500'
+                            : 'bg-zinc-800 bg-opacity-50 border border-zinc-700 border-opacity-40 hover:scale-105'
+                        }`}
+                      >
+                        <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        <div className="flex-1">
+                          <h4 className="text-white font-medium text-sm mb-1 flex items-center gap-2">
+                            Phone
+                            {copiedItem === 'phone' && (
+                              <span className="text-green-400 text-xs animate-fadeIn">✓ Copied!</span>
+                            )}
+                          </h4>
+                          <p className="text-stone-300 text-sm">{placeDetailsCache[modalLocation.id].phone}</p>
+                        </div>
+                        <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    )}
+
+                    {placeDetailsCache[modalLocation.id].website && (
+                      <div className="flex items-start gap-3 p-4 bg-zinc-800 bg-opacity-50 rounded-xl border border-zinc-700 border-opacity-40">
+                        <svg className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                        </svg>
+                        <div>
+                          <h4 className="text-white font-medium text-sm mb-1">Website</h4>
+                          <a
+                            href={placeDetailsCache[modalLocation.id].website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-orange-400 hover:text-orange-300 text-sm transition-colors break-all"
+                          >
+                            Visit Website
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {placeDetailsCache[modalLocation.id].isOpen !== undefined && (
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${
+                        placeDetailsCache[modalLocation.id].isOpen 
+                          ? 'bg-green-500 bg-opacity-20 text-white border border-green-500 border-opacity-30' 
+                          : 'bg-red-500 bg-opacity-20 text-white border border-red-500 border-opacity-30'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${placeDetailsCache[modalLocation.id].isOpen ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                        {placeDetailsCache[modalLocation.id].isOpen ? 'Open Now' : 'Closed'}
+                      </span>
+                    )}
+
+                    {placeDetailsCache[modalLocation.id].priceLevel && (
+                      <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-orange-500 bg-opacity-20 text-orange-400 border border-orange-500 border-opacity-30">
+                        {'$'.repeat(placeDetailsCache[modalLocation.id].priceLevel)}
+                      </span>
+                    )}
+
+                    {placeDetailsCache[modalLocation.id].types && placeDetailsCache[modalLocation.id].types.slice(0, 5).map((type: string, idx: number) => (
+                      <span key={idx} className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-zinc-700 bg-opacity-40 text-stone-300 border border-zinc-600 border-opacity-30">
+                        {type.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+
+                  {placeDetailsCache[modalLocation.id].reviews && placeDetailsCache[modalLocation.id].reviews.length > 0 && (
+                    <div className="pt-4 border-t border-zinc-700 border-opacity-40">
+                      <h3 className="text-white font-semibold text-lg mb-4 flex items-center gap-2">
+                        <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                        </svg>
+                        User Reviews
+                      </h3>
+                      <div className="space-y-4">
+                        {placeDetailsCache[modalLocation.id].reviews.map((review: any, idx: number) => (
+                          <div key={idx} className="bg-zinc-800 bg-opacity-40 rounded-xl p-4 border border-zinc-700 border-opacity-20">
+                            <div className="flex items-start justify-between mb-2">
+                              <span className="text-white font-medium text-sm">{review.author}</span>
+                              <div className="flex items-center gap-1">
+                                {[...Array(5)].map((_, i) => (
+                                  <svg
+                                    key={i}
+                                    className={`w-4 h-4 ${i < review.rating ? 'text-yellow-400' : 'text-gray-600'}`}
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                  >
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                  </svg>
+                                ))}
+                              </div>
+                            </div>
+                            <p className="text-stone-300 text-sm leading-relaxed mb-2">{review.text}</p>
+                            {review.date && (
+                              <span className="text-stone-500 text-xs">{review.date}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => {
+                        const address = placeDetailsCache[modalLocation.id]?.address || `${modalLocation.lat},${modalLocation.lng}`;
+                        navigator.clipboard.writeText(address);
+                        setCopiedItem('copyButton');
+                        setTimeout(() => setCopiedItem(null), 1000);
+                      }}
+                      className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2 hover:scale-105"
+                    >
+                      {copiedItem === 'copyButton' ? (
+                        <>
+                          <svg className="w-5 h-5 text-green-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-green-400">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          Copy Address
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(modalLocation.name)}&query=${modalLocation.lat},${modalLocation.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      Open in Google Maps
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <p className="text-stone-400 text-base">Failed to load details</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo Viewer Modal */}
+      {selectedPhotoIndex !== null && currentPhotos.length > 0 && (
+        <div 
+          className="fixed inset-0 z-[20000] flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm" 
+          onClick={() => {
+            setSelectedPhotoIndex(null);
+            setCurrentPhotos([]);
+          }}
+        >
+          <div className="relative max-w-7xl max-h-[90vh] w-full px-4">
+            {/* Close Button */}
+            <button
+              onClick={() => {
+                setSelectedPhotoIndex(null);
+                setCurrentPhotos([]);
+              }}
+              className="absolute top-4 right-4 w-12 h-12 bg-zinc-800 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:scale-110 z-10"
+            >
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            {/* Left Arrow */}
+            {currentPhotos.length > 1 && selectedPhotoIndex > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedPhotoIndex(selectedPhotoIndex - 1);
+                }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-zinc-800 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:scale-110 z-10"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            
+            {/* Right Arrow */}
+            {currentPhotos.length > 1 && selectedPhotoIndex < currentPhotos.length - 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedPhotoIndex(selectedPhotoIndex + 1);
+                }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-zinc-800 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:scale-110 z-10"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
+            
+            <div className="relative w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+              <Image
+                src={currentPhotos[selectedPhotoIndex]}
+                alt={`Photo ${selectedPhotoIndex + 1} of ${currentPhotos.length}`}
+                width={1200}
+                height={800}
+                quality={100}
+                className="max-w-full max-h-[90vh] w-auto h-auto object-contain rounded-2xl"
+              />
+            </div>
+            
+            {/* Photo Counter */}
+            {currentPhotos.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-zinc-800 bg-opacity-80 backdrop-blur-sm rounded-full text-white text-sm font-medium">
+                {selectedPhotoIndex + 1} / {currentPhotos.length}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
