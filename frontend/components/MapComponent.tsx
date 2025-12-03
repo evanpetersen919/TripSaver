@@ -262,6 +262,16 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
       <Map
         defaultCenter={center}
         defaultZoom={12}
+        minZoom={3}
+        restriction={{
+          latLngBounds: {
+            north: 85,
+            south: -85,
+            west: -180,
+            east: 180,
+          },
+          strictBounds: true,
+        }}
         mapId="itinerary-map"
         gestureHandling="greedy"
         disableDefaultUI={true}

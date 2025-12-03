@@ -794,7 +794,7 @@ export default function Dashboard() {
         </div>
 
         <div 
-          className={`absolute top-5 left-5 bottom-5 backdrop-blur-3xl border border-zinc-800 border-opacity-50 flex flex-col shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] rounded-3xl z-[1000] transition-all duration-500 ease-in-out ${sidebarCollapsed ? 'w-0 border-0 bg-transparent' : 'w-96 min-w-[384px] bg-zinc-900 bg-opacity-95'}`}
+          className={`absolute top-5 bottom-5 backdrop-blur-3xl border border-zinc-800 border-opacity-50 flex flex-col shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] rounded-3xl z-[1000] transition-all duration-500 ease-in-out ${sidebarCollapsed ? 'w-0 border-0 bg-transparent left-2.5' : 'w-96 min-w-[384px] bg-zinc-900 bg-opacity-95 left-5'}`}
           style={{overflow: 'visible'}}
         >
           {/* Minimize Button */}
@@ -972,22 +972,25 @@ export default function Dashboard() {
                           <button
                             onClick={() => handleFindLocations(day)}
                             disabled={loadingRecommendations}
-                            className="bg-gradient-to-br from-purple-500 to-purple-600 text-white px-4 py-2.5 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 hover:shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                            className="bg-zinc-800 bg-opacity-40 backdrop-blur-sm border border-orange-500 border-opacity-50 text-stone-300 px-3 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-orange-600 hover:text-white hover:border-opacity-100 active:scale-95 active:bg-orange-500 active:animate-pulse transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                           >
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M9.5 2L8 6H4l3.5 3L6 13l3.5-2L13 13l-1.5-4L15 6h-4l-1.5-4zm9 6l-.9 2.3L15 11l2.6 1.7L17 15l.9-2.3L20.5 11l-2.6-1.7zM18.5 17l-.6 1.5L16.5 19l1.4.9.6 1.6.6-1.6 1.4-.9-1.4-.9z"/>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                             </svg>
-                            Suggest
+                            Discover
                           </button>
 
                           <label
                             htmlFor={'fileUpload-' + day}
-                            className="bg-gradient-to-br from-orange-500 to-orange-600 text-white px-4 py-2.5 rounded-2xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 hover:shadow-lg hover:scale-105 transition-all shadow-md"
+                            className="bg-zinc-800 bg-opacity-40 backdrop-blur-sm border border-orange-500 border-opacity-50 text-stone-300 px-3 py-2 rounded-xl text-sm font-medium cursor-pointer flex items-center justify-center gap-2 hover:bg-orange-600 hover:text-white hover:border-opacity-100 active:scale-95 active:bg-orange-500 active:animate-pulse transition-all"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              <circle cx="8" cy="9" r="1" fill="currentColor" />
+                              <circle cx="12" cy="9" r="1" fill="currentColor" />
+                              <circle cx="16" cy="9" r="1" fill="currentColor" />
                             </svg>
-                            AI Detect
+                            Detect
                           </label>
                           <input
                             type="file"
