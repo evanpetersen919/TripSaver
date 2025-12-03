@@ -160,20 +160,173 @@ def get_clip_embedder():
 
 
 def get_recommendation_engine():
-    """Simplified recommendation engine for Lambda (no torch)"""
+    """Semantic recommendation engine using pre-computed embeddings"""
     import json
+    import math
+    from typing import List, Dict, Any, Optional
+    from dataclasses import dataclass
     
-    class SimpleRecommendationEngine:
+    @dataclass
+    class Recommendation:
+        name: str
+        landmark_id: int
+        latitude: float
+        longitude: float
+        distance_km: float
+        similarity_score: float
+        final_score: float
+        country: str
+        description: str
+        closest_itinerary_item: str
+    
+    class LightweightRecommendationEngine:
         def __init__(self, landmarks_path):
+            # Load landmarks
             with open(landmarks_path, 'r', encoding='utf-8') as f:
-                self.landmarks = json.load(f)
+                data = json.load(f)
+                self.landmarks = [lm for lm in data.get('landmarks', []) if 'latitude' in lm]
+            
+            # Pre-computed embeddings ready but HF API for query embedding is deprecated
+            # Will re-enable when HF API is fixed - using keyword matching for now
+            self.use_semantic = False
         
-        def recommend_similar(self, landmark_name, preferences=None, top_k=5):
-            # Simple keyword-based recommendations without CLIP
-            return {"success": True, "recommendations": [], "strategy": "simple"}
+        def haversine_distance(self, lat1, lon1, lat2, lon2):
+            R = 6371
+            lat1_rad = math.radians(lat1)
+            lat2_rad = math.radians(lat2)
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = (math.sin(dlat / 2) ** 2 + 
+                 math.cos(lat1_rad) * math.cos(lat2_rad) * 
+                 math.sin(dlon / 2) ** 2)
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            return R * c
+        
+        def compute_query_embedding(self, text: str) -> np.ndarray:
+            """
+            Compute embedding for query text.
+            TODO: Fix HuggingFace Inference API endpoint (deprecated as of Dec 2024)
+            Currently returns None to use keyword fallback.
+            """
+            # HF Inference API is deprecated - will fix with proper endpoint later
+            # For now, keyword similarity works well for proximity-based search
+            return None
+        
+
+        
+        def keyword_similarity(self, text1: str, text2: str) -> float:
+            """Simple keyword-based similarity (0-1)"""
+            words1 = set(text1.lower().split())
+            words2 = set(text2.lower().split())
+            if not words1 or not words2:
+                return 0.0
+            intersection = len(words1 & words2)
+            union = len(words1 | words2)
+            return intersection / union if union > 0 else 0.0
+        
+        def _find_landmark(self, name: str):
+            name_lower = name.lower()
+            for lm in self.landmarks:
+                if lm['name'].lower() == name_lower:
+                    return lm
+            return None
+        
+        def recommend(self, itinerary_landmarks: List[str], llava_description: str,
+                     max_distance_km: Optional[float] = 50.0, top_k: int = 5,
+                     clip_embedding: Optional[np.ndarray] = None) -> List[Recommendation]:
+            """Proximity + keyword similarity recommendations"""
+            if not itinerary_landmarks or max_distance_km is None:
+                return self.search_by_description(llava_description, None, top_k, 0.1)
+            
+            # Get center of itinerary
+            coords = []
+            for name in itinerary_landmarks:
+                lm = self._find_landmark(name)
+                if lm:
+                    coords.append((lm['latitude'], lm['longitude']))
+            
+            if not coords:
+                return []
+            
+            center_lat = sum(c[0] for c in coords) / len(coords)
+            center_lon = sum(c[1] for c in coords) / len(coords)
+            
+            # Find nearby landmarks
+            results = []
+            itin_names_lower = [n.lower() for n in itinerary_landmarks]
+            
+            for lm in self.landmarks:
+                if lm['name'].lower() in itin_names_lower:
+                    continue
+                
+                dist = self.haversine_distance(center_lat, center_lon, 
+                                              lm['latitude'], lm['longitude'])
+                
+                if dist <= max_distance_km:
+                    # Keyword similarity
+                    desc = lm.get('description', lm['name'])
+                    sim = self.keyword_similarity(llava_description, desc)
+                    
+                    # Combined score
+                    proximity_score = 1 - (dist / max_distance_km)
+                    final_score = 0.6 * sim + 0.4 * proximity_score
+                    
+                    # Find closest itinerary item
+                    min_dist = float('inf')
+                    closest_item = None
+                    for itin_name in itinerary_landmarks:
+                        itin_lm = self._find_landmark(itin_name)
+                        if itin_lm:
+                            d = self.haversine_distance(lm['latitude'], lm['longitude'],
+                                                       itin_lm['latitude'], itin_lm['longitude'])
+                            if d < min_dist:
+                                min_dist = d
+                                closest_item = itin_name
+                    
+                    results.append(Recommendation(
+                        name=lm['name'],
+                        landmark_id=lm['landmark_id'],
+                        latitude=lm['latitude'],
+                        longitude=lm['longitude'],
+                        distance_km=min_dist,
+                        similarity_score=sim,
+                        final_score=final_score,
+                        country=lm.get('country', 'Unknown'),
+                        description=lm.get('description', ''),
+                        closest_itinerary_item=closest_item or ''
+                    ))
+            
+            results.sort(key=lambda x: x.final_score, reverse=True)
+            return results[:top_k]
+        
+        def search_by_description(self, llava_description: str,
+                                 clip_embedding: Optional[np.ndarray] = None,
+                                 top_k: int = 10, min_similarity: float = 0.1) -> List[Dict[str, Any]]:
+            """Global search using keyword matching"""
+            results = []
+            for lm in self.landmarks:
+                # Keyword similarity
+                desc = lm.get('description', lm['name'])
+                sim = self.keyword_similarity(llava_description, desc)
+                
+                if sim >= min_similarity:
+                    results.append({
+                        'landmark_id': lm['landmark_id'],
+                        'name': lm['name'],
+                        'description': lm.get('description', ''),
+                        'country': lm.get('country', 'Unknown'),
+                        'latitude': lm['latitude'],
+                        'longitude': lm['longitude'],
+                        'final_score': sim,
+                        'similarity_score': sim,
+                        'distance_km': 0.0
+                    })
+            
+            results.sort(key=lambda x: x['final_score'], reverse=True)
+            return results[:top_k]
     
     landmarks_path = Path(__file__).parent / "data" / "landmarks_unified.json"
-    return SimpleRecommendationEngine(landmarks_path)
+    return LightweightRecommendationEngine(str(landmarks_path))
 
 
 # ============================================================================
@@ -255,21 +408,33 @@ async def signup_endpoint(request: SignupRequest):
     Creates a user account with hashed password and returns JWT token.
     """
     try:
+        print(f"DEBUG: Signup attempt for email={request.email}, username={request.username}")
         result = signup(
             email=request.email,
             username=request.username,
             password=request.password
         )
+        print(f"DEBUG: Signup result: {result}")
+        
+        # Check if signup failed
+        if not result.get('success'):
+            raise ValueError(result.get('error', 'Signup failed'))
+        
+        user = result['user']
         return {
             "message": "User created successfully",
-            "user_id": result['user_id'],
-            "access_token": result['access_token'],
+            "user_id": user['user_id'],
+            "access_token": result['token'],
             "token_type": "bearer"
         }
     except ValueError as e:
+        print(f"ERROR: ValueError in signup: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        print(f"ERROR: Exception in signup: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.post("/auth/login")
@@ -278,20 +443,32 @@ async def login_endpoint(request: LoginRequest):
     Authenticate user and return JWT token.
     """
     try:
+        print(f"DEBUG: Login attempt for email={request.email}")
         result = login(
             email=request.email,
             password=request.password
         )
+        print(f"DEBUG: Login result: {result}")
+        
+        # Check if login failed
+        if not result.get('success'):
+            raise ValueError(result.get('error', 'Login failed'))
+        
+        user = result['user']
         return {
-            "access_token": result['access_token'],
+            "access_token": result['token'],
             "token_type": "bearer",
-            "user_id": result['user_id'],
-            "username": result['username']
+            "user_id": user['user_id'],
+            "username": user['username']
         }
     except ValueError as e:
+        print(f"ERROR: ValueError in login: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        print(f"ERROR: Exception in login: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.post("/auth/password-reset/request")

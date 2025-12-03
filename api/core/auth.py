@@ -152,7 +152,7 @@ def signup(email: str, username: str, password: str,
     try:
         response = table.query(
             IndexName='GSI1',
-            KeyConditionExpression='GSI1PK = :email',
+            KeyConditionExpression='GSI1_PK = :email',
             ExpressionAttributeValues={
                 ':email': f'USER#EMAIL#{email}'
             }
@@ -168,7 +168,7 @@ def signup(email: str, username: str, password: str,
     try:
         response = table.query(
             IndexName='GSI2',
-            KeyConditionExpression='GSI2PK = :username',
+            KeyConditionExpression='GSI2_PK = :username',
             ExpressionAttributeValues={
                 ':username': f'USER#USERNAME#{username}'
             }
@@ -189,10 +189,10 @@ def signup(email: str, username: str, password: str,
     user_item = {
         'PK': f'USER#{user_id}',
         'SK': 'PROFILE',
-        'GSI1PK': f'USER#EMAIL#{email}',
-        'GSI1SK': f'USER#EMAIL#{email}',
-        'GSI2PK': f'USER#USERNAME#{username}',
-        'GSI2SK': f'USER#USERNAME#{username}',
+        'GSI1_PK': f'USER#EMAIL#{email}',
+        'GSI1_SK': f'USER#EMAIL#{email}',
+        'GSI2_PK': f'USER#USERNAME#{username}',
+        'GSI2_SK': f'USER#USERNAME#{username}',
         'entity_type': 'User',
         'user_id': user_id,
         'email': email,
@@ -217,7 +217,7 @@ def signup(email: str, username: str, password: str,
     
     # Return success (exclude hashed_password)
     user_data = {k: v for k, v in user_item.items() 
-                 if k not in ['hashed_password', 'PK', 'SK', 'GSI1PK', 'GSI1SK', 'GSI2PK', 'GSI2SK']}
+                 if k not in ['hashed_password', 'PK', 'SK', 'GSI1_PK', 'GSI1_SK', 'GSI2_PK', 'GSI2_SK']}
     
     return {
         'success': True,
@@ -245,7 +245,7 @@ def login(email: str, password: str) -> Dict[str, Any]:
     try:
         response = table.query(
             IndexName='GSI1',
-            KeyConditionExpression='GSI1PK = :email',
+            KeyConditionExpression='GSI1_PK = :email',
             ExpressionAttributeValues={
                 ':email': f'USER#EMAIL#{email}'
             }
@@ -348,7 +348,7 @@ def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     try:
         response = table.query(
             IndexName='GSI1',
-            KeyConditionExpression='GSI1PK = :email',
+            KeyConditionExpression='GSI1_PK = :email',
             ExpressionAttributeValues={
                 ':email': f'USER#EMAIL#{email}'
             }

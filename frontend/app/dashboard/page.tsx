@@ -138,6 +138,7 @@ export default function Dashboard() {
   const [loadingPlaceDetails, setLoadingPlaceDetails] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modalLocation, setModalLocation] = useState<Location | null>(null);
+  const [recommendations, setRecommendations] = useState<{ name: string; lat: number; lng: number; confidence: number }[]>([]);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [currentPhotos, setCurrentPhotos] = useState<string[]>([]);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
@@ -163,8 +164,14 @@ export default function Dashboard() {
     if (name) setTripName(name);
     if (start) setStartDate(start);
     if (end) setEndDate(end);
-    if (lat) setDestinationLat(parseFloat(lat));
-    if (lng) setDestinationLng(parseFloat(lng));
+    if (lat && lat !== 'undefined') {
+      const parsedLat = parseFloat(lat);
+      if (!isNaN(parsedLat)) setDestinationLat(parsedLat);
+    }
+    if (lng && lng !== 'undefined') {
+      const parsedLng = parseFloat(lng);
+      if (!isNaN(parsedLng)) setDestinationLng(parsedLng);
+    }
 
     if (dest) {
       const destLower = dest.toLowerCase();
@@ -429,39 +436,119 @@ export default function Dashboard() {
   };
 
   const handleFindLocations = async (day: number) => {
+    console.log('🔍 Discover clicked! Day:', day);
     setLoadingRecommendations(true);
+    setCurrentDay(day); // Set the day for adding recommendations
     
-    setTimeout(async () => {
-      const image1 = await getLocationImage('Senso-ji Temple Tokyo');
-      const image2 = await getLocationImage('Meiji Shrine Tokyo');
+    try {
+      // Get auth token from localStorage
+      const token = localStorage.getItem('auth_token');
       
-      const mockLocations: Location[] = [
-        {
-          id: Date.now().toString() + '-1',
-          name: 'Senso-ji Temple',
-          lat: 35.7148,
-          lng: 139.7967,
-          image: image1,
-          day: day,
+      console.log('📍 Destination coordinates:', { destinationLat, destinationLng });
+      console.log('Calling backend with:', {
+        itinerary_landmarks: locations.map(loc => loc.name),
+        destination,
+        token: token ? 'present' : 'missing'
+      });
+      
+      // Try the real backend /recommend endpoint first
+      try {
+        const response = await fetch('https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/recommend', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+          },
+          body: JSON.stringify({
+            itinerary_landmarks: locations.map(loc => loc.name),
+            llava_description: `Popular tourist attractions and landmarks near ${destination}`,
+            clip_embedding: null,
+            max_distance_km: 50.0,
+            top_k: 5
+          }),
+        });
+
+        console.log('Response status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Backend response:', data);
+          
+          // Transform backend response to match our UI format
+          const transformedRecs = data.recommendations.map((rec: any) => ({
+            name: rec.name,
+            lat: rec.latitude,
+            lng: rec.longitude,
+            confidence: rec.final_score || rec.similarity_score || 0.85
+          }));
+          
+          console.log('Transformed recommendations:', transformedRecs);
+          setRecommendations(transformedRecs);
+          setLoadingRecommendations(false);
+          return;
+        } else {
+          const errorText = await response.text();
+          console.warn('Backend error, falling back to Google Places:', response.status, errorText);
+        }
+      } catch (backendError) {
+        console.warn('Backend request failed, falling back to Google Places:', backendError);
+      }
+      
+      // Fallback: Use our API route which calls Google Places API
+      console.log('Using Google Places API fallback via /api/recommendations');
+      console.log('Sending to fallback API:', { destinationLat, destinationLng, existingLocations: locations.length });
+      
+      const placesResponse = await fetch('/api/recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        {
-          id: Date.now().toString() + '-2',
-          name: 'Meiji Shrine',
-          lat: 35.6764,
-          lng: 139.6993,
-          image: image2,
-          day: day,
-        },
-      ];
-      setLocations([...locations, ...mockLocations]);
+        body: JSON.stringify({
+          destinationLat,
+          destinationLng,
+          existingLocations: locations
+        })
+      });
+
+      console.log('Fallback API response status:', placesResponse.status);
+
+      if (placesResponse.ok) {
+        const placesData = await placesResponse.json();
+        console.log('Fallback recommendations:', placesData.recommendations);
+        setRecommendations(placesData.recommendations);
+      } else {
+        const errorText = await placesResponse.text();
+        console.error('Fallback API error:', placesResponse.status, errorText);
+      }
+      
       setLoadingRecommendations(false);
-    }, 1500);
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
+      setLoadingRecommendations(false);
+    }
   };
 
   const handleUpdateNote = (locationId: string, note: string) => {
     setLocations(locations.map(loc => 
       loc.id === locationId ? { ...loc, notes: note } : loc
     ));
+  };
+
+  const handleAddRecommendationToItinerary = async (name: string, lat: number, lng: number) => {
+    const image = await getLocationImage(name);
+    const newLocation: Location = {
+      id: Date.now().toString(),
+      name,
+      lat,
+      lng,
+      image,
+      day: currentDay,
+    };
+    setLocations([...locations, newLocation]);
+  };
+
+  const handleClearRecommendations = () => {
+    setRecommendations([]);
   };
 
   // Share functionality
@@ -789,7 +876,9 @@ export default function Dashboard() {
           <MapComponent 
             landmarks={locations} 
             selectedLandmark={selectedLocation} 
-            onAddToItinerary={handleAddFromMap}
+            onAddToItinerary={handleAddRecommendationToItinerary}
+            recommendations={recommendations}
+            onClearRecommendations={handleClearRecommendations}
           />
         </div>
 

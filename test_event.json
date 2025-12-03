@@ -1,0 +1,9 @@
+{
+  "resource": "/auth/signup",
+  "path": "/auth/signup",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"email\": \"testuser@example.com\", \"username\": \"testuser\", \"password\": \"TestPassword123!\"}"
+}

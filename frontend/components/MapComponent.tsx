@@ -52,10 +52,19 @@ interface Location {
   notes?: string;
 }
 
+interface Recommendation {
+  name: string;
+  lat: number;
+  lng: number;
+  confidence: number;
+}
+
 interface MapComponentProps {
   landmarks: Location[];
   selectedLandmark: Location | null;
   onAddToItinerary?: (name: string, lat: number, lng: number) => void;
+  recommendations?: Recommendation[];
+  onClearRecommendations?: () => void;
 }
 
 // 50 distinct colors for different days
@@ -96,7 +105,71 @@ const NumberedMarker = ({ number, color }: { number: number; color: string }) =>
   </div>
 );
 
-export default function MapComponent({ landmarks, selectedLandmark, onAddToItinerary }: MapComponentProps) {
+const AIRecommendationMarker = ({ rank, isSelected }: { rank: number; isSelected: boolean }) => (
+  <div style={{
+    position: 'relative',
+    width: '48px',
+    height: '48px',
+    animation: 'bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+    animationDelay: `${rank * 0.1}s`,
+    animationFillMode: 'both'
+  }}>
+    <style jsx>{`
+      @keyframes bounce-in {
+        0% { transform: scale(0) translateY(-20px); opacity: 0; }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1) translateY(0); opacity: 1; }
+      }
+      @keyframes pulse-ring {
+        0% { transform: scale(0.8); opacity: 1; }
+        100% { transform: scale(1.8); opacity: 0; }
+      }
+    `}</style>
+    
+    {/* Pulsing ring animation */}
+    <div style={{
+      position: 'absolute',
+      inset: '-6px',
+      borderRadius: '50%',
+      background: 'linear-gradient(135deg, #f97316, #fb923c)',
+      animation: 'pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      opacity: 0.6
+    }}></div>
+    
+    {/* Main marker */}
+    <div style={{
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      borderRadius: '50%',
+      background: isSelected 
+        ? 'linear-gradient(135deg, #f97316, #fb923c)'
+        : 'linear-gradient(135deg, #18181b, #27272a)',
+      border: '3px solid',
+      borderColor: rank === 1 ? '#f97316' : rank === 2 ? '#fb923c' : '#fbbf24',
+      boxShadow: isSelected 
+        ? '0 8px 32px rgba(249, 115, 22, 0.6), 0 0 0 2px rgba(249, 115, 22, 0.2)'
+        : '0 4px 16px rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'pointer',
+      transform: isSelected ? 'scale(1.15)' : 'scale(1)',
+      transition: 'all 0.3s ease'
+    }}>
+      <span style={{
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: '20px',
+        textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+      }}>
+        {rank}
+      </span>
+    </div>
+  </div>
+);
+
+export default function MapComponent({ landmarks, selectedLandmark, onAddToItinerary, recommendations = [], onClearRecommendations }: MapComponentProps) {
   const center = landmarks.length > 0 
     ? { lat: landmarks[0].lat, lng: landmarks[0].lng }
     : { lat: 35.6762, lng: 139.6503 };
@@ -114,6 +187,9 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
   const [modalClickedPlace, setModalClickedPlace] = useState<{ lat: number; lng: number; name: string; id: string } | null>(null);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
   const [currentPhotos, setCurrentPhotos] = useState<string[]>([]);
+  
+  // State for recommendations
+  const [selectedRecommendation, setSelectedRecommendation] = useState<number | null>(null);
 
   const locationsByDay: { [key: number]: Location[] } = {};
   landmarks.forEach(loc => {
@@ -566,6 +642,97 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
             </div>
           </div>
         )}
+
+        {/* AI Recommendation Markers */}
+        {recommendations.map((rec, index) => (
+          <div key={`rec-${index}`}>
+            <AdvancedMarker
+              position={{ lat: rec.lat, lng: rec.lng }}
+              onClick={() => setSelectedRecommendation(index)}
+            >
+              <AIRecommendationMarker rank={index + 1} isSelected={selectedRecommendation === index} />
+            </AdvancedMarker>
+
+            {selectedRecommendation === index && (
+              <InfoWindow
+                position={{ lat: rec.lat, lng: rec.lng }}
+                onCloseClick={() => setSelectedRecommendation(null)}
+                headerDisabled
+              >
+                <div style={{
+                  position: 'relative',
+                  background: 'linear-gradient(135deg, #18181b, #27272a)',
+                  borderRadius: '16px',
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+                  overflow: 'hidden',
+                  minWidth: '240px',
+                  maxWidth: '280px',
+                  border: '2px solid #f97316'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-10px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: 0,
+                    height: 0,
+                    borderLeft: '10px solid transparent',
+                    borderRight: '10px solid transparent',
+                    borderTop: '10px solid #f97316',
+                    zIndex: 1000
+                  }}></div>
+
+                  <button
+                    onClick={() => setSelectedRecommendation(null)}
+                    className="absolute top-2 right-2 z-10 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full p-1 transition-all"
+                    style={{ width: '24px', height: '24px' }}
+                  >
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+
+                  <div className="px-4 py-3" style={{
+                    background: 'linear-gradient(135deg, #f97316, #fb923c)',
+                  }}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-white font-bold text-sm">AI Recommendation</span>
+                      <span className="bg-black bg-opacity-30 text-white text-xs font-bold px-2 py-0.5 rounded-full">#{index + 1}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                      <span className="text-white text-xs font-semibold">Confidence: {(rec.confidence * 100).toFixed(0)}%</span>
+                    </div>
+                  </div>
+
+                  <div className="px-4 py-3">
+                    <h3 className="font-bold text-base text-white mb-3">{rec.name}</h3>
+                    
+                    <button
+                      onClick={() => {
+                        if (onAddToItinerary) {
+                          onAddToItinerary(rec.name, rec.lat, rec.lng);
+                          setSelectedRecommendation(null);
+                          if (onClearRecommendations) {
+                            onClearRecommendations();
+                          }
+                        }
+                      }}
+                      className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Add to Itinerary
+                    </button>
+                  </div>
+                </div>
+              </InfoWindow>
+            )}
+          </div>
+        ))}
       </Map>
       
       {/* Modal for clicked places */}
