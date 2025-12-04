@@ -2,3 +2,15 @@ torch>=2.0.0
 torchvision>=0.15.0
 pillow>=9.0.0
 gradio>=4.0.0
+
+# CLIP support
+open-clip-torch>=2.20.0
+
+# LLaVA support
+transformers>=4.37.0
+accelerate>=0.25.0
+bitsandbytes>=0.41.0
+
+# Additional utilities
+numpy>=1.24.0
+sentencepiece>=0.1.99

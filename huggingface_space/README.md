@@ -1,5 +1,5 @@
 ---
-title: Landmark Detector
+title: CV Location Classifier
 emoji: 🗺️
 colorFrom: blue
 colorTo: green
@@ -10,9 +10,9 @@ pinned: false
 license: mit
 ---
 
-# Landmark Detector API
+# 🗺️ CV Location Classifier - Multi-Model Vision Pipeline
 
-EfficientNet-B3 model trained on 500 landmark classes with **81.37% validation accuracy**.
+**Three powerful AI models working together:** EfficientNet-B3, CLIP ViT-B/32, and LLaVA-1.5-7B
 
 ## 🚀 Features
 
