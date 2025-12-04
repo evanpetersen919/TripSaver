@@ -26,6 +26,7 @@ import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime
 import os
+import requests
 from dotenv import load_dotenv
 
 # Local imports
@@ -186,9 +187,28 @@ def get_recommendation_engine():
                 data = json.load(f)
                 self.landmarks = [lm for lm in data.get('landmarks', []) if 'latitude' in lm]
             
-            # Pre-computed embeddings ready but HF API for query embedding is deprecated
-            # Will re-enable when HF API is fixed - using keyword matching for now
+            # Load pre-computed embeddings
+            embeddings_dir = Path(landmarks_path).parent / 'embeddings'
+            embeddings_path = embeddings_dir / 'landmark_text_embeddings.npy'
+            metadata_path = embeddings_dir / 'landmark_text_metadata.json'
+            
             self.use_semantic = False
+            self.embeddings = None
+            self.landmark_id_to_idx = {}
+            
+            if embeddings_path.exists() and metadata_path.exists():
+                try:
+                    self.embeddings = np.load(str(embeddings_path))
+                    with open(metadata_path, 'r') as f:
+                        metadata = json.load(f)
+                        landmark_ids = metadata['landmark_ids']
+                        # Create mapping from landmark_id to embedding index
+                        self.landmark_id_to_idx = {lid: i for i, lid in enumerate(landmark_ids)}
+                    self.use_semantic = True
+                    print(f"Loaded {len(self.embeddings)} pre-computed embeddings")
+                except Exception as e:
+                    print(f"Warning: Could not load embeddings: {e}")
+                    self.use_semantic = False
         
         def haversine_distance(self, lat1, lon1, lat2, lon2):
             R = 6371
@@ -202,17 +222,57 @@ def get_recommendation_engine():
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
             return R * c
         
-        def compute_query_embedding(self, text: str) -> np.ndarray:
+        def compute_query_embedding(self, text: str) -> Optional[np.ndarray]:
             """
-            Compute embedding for query text.
-            TODO: Fix HuggingFace Inference API endpoint (deprecated as of Dec 2024)
-            Currently returns None to use keyword fallback.
+            Compute embedding for query text using HuggingFace Inference Providers.
+            Uses the InferenceClient with sentence-transformers model.
+            Falls back to keyword matching if API fails.
             """
-            # HF Inference API is deprecated - will fix with proper endpoint later
-            # For now, keyword similarity works well for proximity-based search
-            return None
+            try:
+                hf_token = os.getenv('HUGGINGFACE_API_TOKEN') or os.getenv('HF_TOKEN')
+                if not hf_token:
+                    print("Warning: HUGGINGFACE_API_TOKEN not set, using keyword matching")
+                    return None
+                
+                # Use HuggingFace InferenceClient for feature extraction
+                from huggingface_hub import InferenceClient
+                
+                client = InferenceClient(api_key=hf_token)
+                
+                # Call feature_extraction (free tier serverless inference)
+                embedding = client.feature_extraction(
+                    text,
+                    model="sentence-transformers/all-MiniLM-L6-v2"
+                )
+                
+                # Convert to numpy and normalize
+                embedding_array = np.array(embedding)
+                norm = np.linalg.norm(embedding_array)
+                if norm > 0:
+                    embedding_array = embedding_array / norm
+                
+                return embedding_array
+                    
+            except Exception as e:
+                print(f"Error computing query embedding: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
         
 
+        def semantic_similarity(self, query_embedding: np.ndarray, landmark_id: int) -> float:
+            """Compute cosine similarity using pre-computed embeddings"""
+            if not self.use_semantic or query_embedding is None:
+                return 0.0
+            
+            idx = self.landmark_id_to_idx.get(landmark_id)
+            if idx is None:
+                return 0.0
+            
+            landmark_embedding = self.embeddings[idx]
+            # Both are already normalized, so dot product = cosine similarity
+            similarity = float(np.dot(query_embedding, landmark_embedding))
+            return max(0.0, min(1.0, similarity))  # Clamp to [0, 1]
         
         def keyword_similarity(self, text1: str, text2: str) -> float:
             """Simple keyword-based similarity (0-1)"""
@@ -234,9 +294,12 @@ def get_recommendation_engine():
         def recommend(self, itinerary_landmarks: List[str], llava_description: str,
                      max_distance_km: Optional[float] = 50.0, top_k: int = 5,
                      clip_embedding: Optional[np.ndarray] = None) -> List[Recommendation]:
-            """Proximity + keyword similarity recommendations"""
+            """Proximity + semantic/keyword similarity recommendations"""
             if not itinerary_landmarks or max_distance_km is None:
                 return self.search_by_description(llava_description, None, top_k, 0.1)
+            
+            # Compute query embedding once
+            query_embedding = self.compute_query_embedding(llava_description)
             
             # Get center of itinerary
             coords = []
@@ -263,9 +326,12 @@ def get_recommendation_engine():
                                               lm['latitude'], lm['longitude'])
                 
                 if dist <= max_distance_km:
-                    # Keyword similarity
-                    desc = lm.get('description', lm['name'])
-                    sim = self.keyword_similarity(llava_description, desc)
+                    # Try semantic similarity first, fall back to keyword
+                    if self.use_semantic and query_embedding is not None:
+                        sim = self.semantic_similarity(query_embedding, lm['landmark_id'])
+                    else:
+                        desc = lm.get('description', lm['name'])
+                        sim = self.keyword_similarity(llava_description, desc)
                     
                     # Combined score
                     proximity_score = 1 - (dist / max_distance_km)
@@ -302,12 +368,18 @@ def get_recommendation_engine():
         def search_by_description(self, llava_description: str,
                                  clip_embedding: Optional[np.ndarray] = None,
                                  top_k: int = 10, min_similarity: float = 0.1) -> List[Dict[str, Any]]:
-            """Global search using keyword matching"""
+            """Global search using semantic or keyword matching"""
+            # Compute query embedding once
+            query_embedding = self.compute_query_embedding(llava_description)
+            
             results = []
             for lm in self.landmarks:
-                # Keyword similarity
-                desc = lm.get('description', lm['name'])
-                sim = self.keyword_similarity(llava_description, desc)
+                # Try semantic similarity first, fall back to keyword
+                if self.use_semantic and query_embedding is not None:
+                    sim = self.semantic_similarity(query_embedding, lm['landmark_id'])
+                else:
+                    desc = lm.get('description', lm['name'])
+                    sim = self.keyword_similarity(llava_description, desc)
                 
                 if sim >= min_similarity:
                     results.append({

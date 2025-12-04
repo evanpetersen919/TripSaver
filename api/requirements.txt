@@ -13,6 +13,7 @@ pydantic[email]>=2.5.0
 
 # HTTP client for HF Space
 requests>=2.31.0
+huggingface_hub>=0.20.0
 
 # Basic utilities
 pillow>=9.0.0
