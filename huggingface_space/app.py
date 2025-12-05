@@ -145,7 +145,7 @@ class LLaVAAnalyzer:
         else:
             prompt = f"USER: <image>\n{prompt}\nASSISTANT:"
         
-        inputs = self.processor(prompt, image, return_tensors="pt").to(self.device)
+        inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
         
         output = self.model.generate(**inputs, max_new_tokens=200)
         description = self.processor.decode(output[0], skip_special_tokens=True)
