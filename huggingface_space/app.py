@@ -111,25 +111,26 @@ class ClipEmbedder:
 
 
 class LLaVAAnalyzer:
-    """LLaVA 1.5 7B vision-language model."""
+    """LLaVA 1.6 Mistral 7B vision-language model (faster variant)."""
     
-    def __init__(self, model_name: str = "llava-hf/llava-1.5-7b-hf"):
+    def __init__(self, model_name: str = "llava-hf/llava-v1.6-mistral-7b-hf"):
         try:
             from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, BitsAndBytesConfig
             
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             
-            # 4-bit quantization for memory efficiency
+            # 8-bit quantization for better CPU performance
             quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16
+                load_in_8bit=True,
+                bnb_8bit_compute_dtype=torch.float16
             )
             
             self.processor = LlavaNextProcessor.from_pretrained(model_name)
             self.model = LlavaNextForConditionalGeneration.from_pretrained(
                 model_name,
                 quantization_config=quantization_config,
-                device_map="auto"
+                device_map="auto",
+                low_cpu_mem_usage=True
             )
             
         except Exception as e:
@@ -147,7 +148,7 @@ class LLaVAAnalyzer:
         
         inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
         
-        output = self.model.generate(**inputs, max_new_tokens=200)
+        output = self.model.generate(**inputs, max_new_tokens=150, do_sample=False)
         description = self.processor.decode(output[0], skip_special_tokens=True)
         
         # Extract assistant response
@@ -243,7 +244,7 @@ async def root():
         <ul>
             <li>EfficientNet-B3: 500 landmark classes (81.37% accuracy)</li>
             <li>CLIP ViT-B/32: Visual similarity & text-to-image search</li>
-            <li>LLaVA-1.5-7B: Natural language scene understanding</li>
+            <li>LLaVA-1.6-Mistral-7B: Natural language scene understanding (optimized)</li>
         </ul>
         
         <div class="section">
@@ -396,7 +397,7 @@ async def analyze_with_llava(file: UploadFile = File(...), prompt: Optional[str]
         return JSONResponse({
             "success": True,
             "description": description,
-            "model": "LLaVA-1.5-7B"
+            "model": "LLaVA-1.6-Mistral-7B"
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -424,7 +425,7 @@ async def complete_pipeline(file: UploadFile = File(...)):
             "landmark_predictions": predictions,
             "clip_embedding_dim": len(embedding),
             "llava_description": description,
-            "models_used": ["EfficientNet-B3", "CLIP ViT-B/32", "LLaVA-1.5-7B"]
+            "models_used": ["EfficientNet-B3", "CLIP ViT-B/32", "LLaVA-1.6-Mistral-7B"]
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
