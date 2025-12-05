@@ -27,8 +27,9 @@ Globals:
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-      AllowHeaders: "'Content-Type,Authorization'"
+      AllowHeaders: "'Content-Type,Authorization,X-Requested-With,Accept'"
       AllowOrigin: "'*'"
+      AllowCredentials: false
 
 # ============================================================================
 # PARAMETERS
@@ -199,6 +200,13 @@ Resources:
           Properties:
             RestApiId: !Ref LocationClassifierAPI
             Path: /predict
+            Method: POST
+        
+        PredictFallback:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /predict/fallback/{prediction_id}
             Method: POST
         
         # Recommendation endpoints

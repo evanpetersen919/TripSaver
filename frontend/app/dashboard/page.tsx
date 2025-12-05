@@ -144,6 +144,25 @@ export default function Dashboard() {
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareableLink, setShareableLink] = useState('');
+  const [predictionModal, setPredictionModal] = useState<{
+    show: boolean;
+    predictionId: string;
+    predictions: any[];
+    imagePreview: string;
+  } | null>(null);
+  const [loadingFallback, setLoadingFallback] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadModalDay, setUploadModalDay] = useState<number>(1);
+  const [showFallbackModal, setShowFallbackModal] = useState(false);
+  const [fallbackConfirmModal, setFallbackConfirmModal] = useState<{
+    show: boolean;
+    landmarkName: string;
+    visionDescription: string;
+    image: string;
+    latitude: number;
+    longitude: number;
+    confidence: number;
+  } | null>(null);
   
   // Debounce timers
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -181,26 +200,225 @@ export default function Dashboard() {
     }
   }, []);
 
+  const fetchPlacePhotos = async (placeName: string) => {
+    try {
+      console.log(`[Frontend] Fetching photos for: ${placeName}`);
+      const response = await fetch(
+        `/api/landmarks/place-details?name=${encodeURIComponent(placeName)}`
+      );
+      const data = await response.json();
+      console.log(`[Frontend] Photo data received:`, data);
+      
+      if (data.error) {
+        console.error('[Frontend] API returned error:', data.error);
+      }
+      
+      if (data.photos && data.photos.length > 0) {
+        return {
+          photos: data.photos,
+          location: data.location,
+          city: data.city || null,
+          country: data.country || null
+        };
+      }
+    } catch (error) {
+      console.error('[Frontend] Error fetching place photos:', error);
+    }
+    return { photos: [], location: null, city: null, country: null };
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setUploading(true);
     
-    console.log('Uploading files:', files);
+    console.log('Uploading file for prediction:', files[0].name);
     
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append('file', files[0]);
+      
+      // Call Lambda /predict endpoint
+      const response = await fetch('https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/predict', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(`Prediction failed: ${response.status} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Prediction result:', result);
+      
+      // Show predictions in modal for user to accept/reject
+      if (result.predictions && result.predictions.length > 0) {
+        // Create image preview URL
+        const imagePreview = URL.createObjectURL(files[0]);
+        
+        // Fetch photos for each prediction
+        const predictionsWithPhotos = await Promise.all(
+          result.predictions.map(async (pred: any) => {
+            const placeData = await fetchPlacePhotos(pred.landmark);
+            return { 
+              ...pred, 
+              photos: placeData.photos,
+              googleLocation: placeData.location,
+              city: placeData.city,
+              country: placeData.country
+            };
+          })
+        );
+        
+        setPredictionModal({
+          show: true,
+          predictionId: result.prediction_id,
+          predictions: predictionsWithPhotos,
+          imagePreview: imagePreview,
+        });
+        setUploading(false);
+        setShowUploadModal(false);
+      } else {
+        throw new Error('No predictions returned');
+      }
+      
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to identify landmark:\n${errorMsg}\n\nCheck console for details.`);
       setUploading(false);
-      const newLocation: Location = {
-        id: Date.now().toString(),
-        name: 'Detected Landmark',
-        lat: 35.6762 + Math.random() * 0.1,
-        lng: 139.6503 + Math.random() * 0.1,
-        confidence: 0.8 + Math.random() * 0.15,
-        day: currentDay,
-      };
-      setLocations([...locations, newLocation]);
-    }, 2000);
+    }
+  };
+
+  const handleAcceptPrediction = (prediction: any) => {
+    if (!predictionModal) return;
+    
+    // Use Google Places location first, then prediction coords, then fallback
+    let lat = destinationLat + Math.random() * 0.1 - 0.05;
+    let lng = destinationLng + Math.random() * 0.1 - 0.05;
+    
+    if (prediction.googleLocation) {
+      lat = prediction.googleLocation.latitude;
+      lng = prediction.googleLocation.longitude;
+    } else if (prediction.latitude && prediction.longitude) {
+      lat = prediction.latitude;
+      lng = prediction.longitude;
+    }
+    
+    // Use the first Google Places photo if available, otherwise no image
+    const landmarkImage = prediction.photos && prediction.photos.length > 0 
+      ? prediction.photos[0].url 
+      : undefined;
+    
+    const newLocation: Location = {
+      id: predictionModal.predictionId,
+      name: prediction.landmark,
+      lat,
+      lng,
+      image: landmarkImage,
+      confidence: prediction.confidence,
+      day: currentDay,
+    };
+    
+    setLocations([...locations, newLocation]);
+    setPredictionModal(null);
+  };
+
+  const handleRejectPrediction = async () => {
+    if (!predictionModal) return;
+    
+    // Close prediction modal and show purple fallback modal
+    setPredictionModal(null);
+    setShowFallbackModal(true);
+    setLoadingFallback(true);
+    
+    try {
+      console.log('Triggering fallback for prediction:', predictionModal.predictionId);
+      
+      // Call fallback endpoint with CLIP + Groq (URL-encode prediction ID)
+      const encodedPredictionId = encodeURIComponent(predictionModal.predictionId);
+      const response = await fetch(
+        `https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/predict/fallback/${encodedPredictionId}`,
+        { method: 'POST' }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Fallback failed: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Fallback result:', result);
+      
+      // Process top recommendation
+      if (result.recommendations && result.recommendations.length > 0) {
+        const topRec = result.recommendations[0];
+        console.log('Top recommendation:', topRec);
+        
+        // Fetch photos and location details for the top recommendation
+        const placeData = await fetchPlacePhotos(topRec.name);
+        console.log('Place data for', topRec.name, ':', placeData);
+        
+        // Use coordinates from recommendation or place data
+        const latitude = topRec.latitude || placeData.location?.latitude || (destinationLat + Math.random() * 0.1 - 0.05);
+        const longitude = topRec.longitude || placeData.location?.longitude || (destinationLng + Math.random() * 0.1 - 0.05);
+        
+        const imageUrl = placeData.photos && placeData.photos.length > 0 ? placeData.photos[0].url : '';
+        
+        // Close purple loading modal and show confirmation modal
+        setShowFallbackModal(false);
+        setLoadingFallback(false);
+        
+        // Show confirmation modal with AI analysis
+        // Strip markdown formatting (** **) from vision description
+        const cleanDescription = (result.vision_description || 'No description available')
+          .replace(/\*\*(.*?)\*\*/g, '$1')  // Remove **bold** markers
+          .replace(/\*(.*?)\*/g, '$1');      // Remove *italic* markers
+        
+        setFallbackConfirmModal({
+          show: true,
+          landmarkName: topRec.name,
+          visionDescription: cleanDescription,
+          image: imageUrl,
+          latitude,
+          longitude,
+          confidence: topRec.confidence || topRec.similarity || 0.85  // Default to 85% if not provided
+        });
+      } else {
+        setShowFallbackModal(false);
+        setLoadingFallback(false);
+        alert('No recommendations found. Please try a different photo.');
+      }
+      
+    } catch (error) {
+      console.error('Error in fallback:', error);
+      alert('Fallback analysis failed. Please try again.');
+      setShowFallbackModal(false);
+      setLoadingFallback(false);
+    }
+  };
+
+  const handleConfirmFallbackLocation = () => {
+    if (!fallbackConfirmModal) return;
+    
+    const newLocation: Location = {
+      id: Date.now().toString(),
+      name: fallbackConfirmModal.landmarkName,
+      lat: fallbackConfirmModal.latitude,
+      lng: fallbackConfirmModal.longitude,
+      confidence: fallbackConfirmModal.confidence,
+      day: currentDay,
+      image: fallbackConfirmModal.image || undefined
+    };
+    
+    setLocations([...locations, newLocation]);
+    setFallbackConfirmModal(null);
+  };
+
+  const handleRejectFallbackLocation = () => {
+    setFallbackConfirmModal(null);
   };
 
   const getTotalDays = () => {
@@ -1069,8 +1287,12 @@ export default function Dashboard() {
                             Discover
                           </button>
 
-                          <label
-                            htmlFor={'fileUpload-' + day}
+                          <button
+                            onClick={() => {
+                              setCurrentDay(day);
+                              setUploadModalDay(day);
+                              setShowUploadModal(true);
+                            }}
                             className="bg-zinc-800 bg-opacity-40 backdrop-blur-sm border border-orange-500 border-opacity-50 text-stone-300 px-3 py-2 rounded-xl text-sm font-medium cursor-pointer flex items-center justify-center gap-2 hover:bg-orange-600 hover:text-white hover:border-opacity-100 active:scale-95 active:bg-orange-500 active:animate-pulse transition-all"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1080,18 +1302,7 @@ export default function Dashboard() {
                               <circle cx="16" cy="9" r="1" fill="currentColor" />
                             </svg>
                             Detect
-                          </label>
-                          <input
-                            type="file"
-                            id={'fileUpload-' + day}
-                            multiple
-                            accept="image/*"
-                            onChange={(e) => {
-                              setCurrentDay(day);
-                              handleFileUpload(e);
-                            }}
-                            className="hidden"
-                          />
+                          </button>
                         </div>
 
                         {dayLocations.length === 0 ? (
@@ -1113,43 +1324,43 @@ export default function Dashboard() {
                                       : 'bg-zinc-800 bg-opacity-60 border border-zinc-700 border-opacity-40 hover:bg-opacity-70 hover:shadow-[0_8px_30px_rgb(0,0,0,0.4)] hover:scale-[1.01]'
                                   ) + (showMoreInfo === location.id ? ' min-h-[600px]' : '')}
                                 >
-                                  {location.image && (
-                                    <div
-                                      className="relative h-40 w-full cursor-pointer overflow-hidden rounded-t-3xl"
-                                      onClick={() => setSelectedLocation(location)}
-                                    >
+                                  <div
+                                    className="relative h-40 w-full cursor-pointer overflow-hidden rounded-t-3xl"
+                                    onClick={() => setSelectedLocation(location)}
+                                  >
+                                    {location.image ? (
                                       <img
                                         src={location.image}
                                         alt={location.name}
                                         className="absolute inset-0 w-full h-full object-cover"
                                       />
-                                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                                      <div 
-                                        className="absolute top-3 left-3 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-xl border-2 border-white"
-                                        style={{ backgroundColor: dayColors[day % dayColors.length] }}
-                                      >
-                                        {index + 1}
+                                    ) : (
+                                      <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
+                                        <svg className="w-16 h-16 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
                                       </div>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDeleteLocation(location.id);
-                                        }}
-                                        className="absolute top-3 right-3 w-8 h-8 bg-black bg-opacity-60 hover:bg-opacity-80 backdrop-blur-xl rounded-full flex items-center justify-center transition-all border border-white border-opacity-20 hover:scale-110"
-                                      >
-                                        <span className="text-stone-400 hover:text-red-400 transition-colors">X</span>
-                                      </button>
-                                      {location.confidence && (
-                                        <div className="absolute top-2 right-11 bg-black bg-opacity-60 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-1 text-xs text-white">
-                                          <span className="text-yellow-400">OK</span>
-                                          {(location.confidence * 100).toFixed(0)}%
-                                        </div>
-                                      )}
-                                      <h3 className="absolute bottom-2 left-2 right-2 text-white text-sm font-semibold truncate drop-shadow-lg">
-                                        {location.name}
-                                      </h3>
+                                    )}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                                    <div 
+                                      className="absolute top-3 left-3 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-xl border-2 border-white"
+                                      style={{ backgroundColor: dayColors[day % dayColors.length] }}
+                                    >
+                                      {index + 1}
                                     </div>
-                                  )}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteLocation(location.id);
+                                      }}
+                                      className="absolute top-3 right-3 w-8 h-8 bg-black bg-opacity-60 hover:bg-opacity-80 backdrop-blur-xl rounded-full flex items-center justify-center transition-all border border-white border-opacity-20 hover:scale-110"
+                                    >
+                                      <span className="text-stone-400 hover:text-red-400 transition-colors">X</span>
+                                    </button>
+                                    <h3 className="absolute bottom-2 left-2 right-2 text-white text-sm font-semibold truncate drop-shadow-lg">
+                                      {location.name}
+                                    </h3>
+                                  </div>
 
                                   <div className="px-3 py-2">
                                     {editingNote === location.id ? (
@@ -2004,6 +2215,381 @@ export default function Dashboard() {
                   </svg>
                   <p className="text-stone-400 text-xs">This link will remain valid as long as your browser storage is not cleared. Anyone with this link can view your itinerary.</p>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prediction Modal */}
+      {predictionModal?.show && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-gradient-to-br from-zinc-900 to-stone-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-orange-500/20">
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-zinc-900 to-stone-900 border-b border-orange-500/20 p-6 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-orange-400">Landmark Detected</h2>
+                  <p className="text-stone-400 text-sm mt-1">Select the correct landmark or request better analysis</p>
+                </div>
+                <button
+                  onClick={() => setPredictionModal(null)}
+                  className="text-stone-400 hover:text-orange-400 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Image Preview */}
+              <div className="relative w-full h-80 bg-zinc-800 rounded-xl overflow-hidden">
+                <img
+                  src={predictionModal.imagePreview}
+                  alt="Uploaded landmark"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+
+              {/* Predictions List */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold text-stone-100">Top Predictions:</h3>
+                {predictionModal.predictions.map((pred, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleAcceptPrediction(pred)}
+                    className="w-full bg-zinc-800/50 hover:bg-zinc-800 border border-stone-700 hover:border-orange-500/50 rounded-xl overflow-hidden transition-all duration-200 text-left group"
+                  >
+                    {/* Image Gallery */}
+                    {pred.photos && pred.photos.length > 0 ? (
+                      <div className="flex overflow-x-auto gap-2 p-3 bg-zinc-900/50">
+                        {pred.photos.map((photo: any, imgIdx: number) => (
+                          <img
+                            key={imgIdx}
+                            src={photo.url}
+                            alt={`${pred.landmark} ${imgIdx + 1}`}
+                            className="h-32 w-48 object-cover rounded flex-shrink-0"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex overflow-x-auto gap-2 p-3 bg-zinc-900/50">
+                        {[1, 2, 3].map((imgIdx) => (
+                          <div
+                            key={imgIdx}
+                            className="h-32 w-48 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded flex-shrink-0 flex items-center justify-center text-stone-600"
+                          >
+                            <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Prediction Info */}
+                    <div className="p-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="text-orange-400 font-bold text-xl">#{idx + 1}</span>
+                            <div>
+                              <div className="text-stone-100 font-semibold text-lg group-hover:text-orange-400 transition-colors">
+                                {pred.landmark}
+                              </div>
+                              {(pred.city || pred.country) && (
+                                <p className="text-stone-500 text-sm mt-1">
+                                  {pred.city}{pred.city && pred.country ? ', ' : ''}{pred.country}
+                                </p>
+                              )}
+                              {pred.latitude && pred.longitude && (
+                                <p className="text-stone-400 text-xs mt-0.5">
+                                  📍 {pred.latitude.toFixed(4)}, {pred.longitude.toFixed(4)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="text-orange-400 font-bold text-lg">
+                              {(pred.confidence * 100).toFixed(1)}%
+                            </div>
+                            <div className="text-stone-500 text-xs">confidence</div>
+                          </div>
+                          <svg className="w-5 h-5 text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Fallback Button */}
+              <div className="pt-4 border-t border-stone-700">
+                <button
+                  onClick={handleRejectPrediction}
+                  disabled={loadingFallback}
+                  className="w-full bg-zinc-800/50 hover:bg-zinc-800 border-2 border-purple-500 hover:border-purple-400 disabled:opacity-50 text-purple-300 hover:text-purple-200 font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+                >
+                  <span>None of These? Analyze Deeper with AI</span>
+                </button>
+                <p className="text-stone-500 text-sm text-center mt-2">
+                  Uses CLIP visual similarity + Groq vision AI for deeper analysis
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-gradient-to-br from-zinc-900 to-black border border-stone-700 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-stone-100">Upload Your Photos</h2>
+                <button
+                  onClick={() => setShowUploadModal(false)}
+                  className="text-stone-400 hover:text-stone-200 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {!uploading ? (
+                <>
+                  {/* Drag and Drop Area */}
+                  <label
+                    htmlFor="modal-file-upload"
+                    className="block border-2 border-dashed border-orange-500/50 hover:border-orange-500 rounded-xl p-12 text-center cursor-pointer transition-all hover:bg-orange-500/5 group"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add('border-orange-500', 'bg-orange-500/10');
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.classList.remove('border-orange-500', 'bg-orange-500/10');
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-orange-500', 'bg-orange-500/10');
+                      const files = e.dataTransfer.files;
+                      if (files && files.length > 0) {
+                        const input = document.getElementById('modal-file-upload') as HTMLInputElement;
+                        if (input) {
+                          const dataTransfer = new DataTransfer();
+                          for (let i = 0; i < files.length; i++) {
+                            dataTransfer.items.add(files[i]);
+                          }
+                          input.files = dataTransfer.files;
+                          handleFileUpload({ target: input } as any);
+                        }
+                      }
+                    }}
+                  >
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <svg className="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-stone-100 font-medium mb-1">
+                          Click to browse or drag and drop
+                        </p>
+                        <p className="text-stone-500 text-sm">
+                          Upload photos of landmarks to detect
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+                  <input
+                    type="file"
+                    id="modal-file-upload"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e)}
+                    className="hidden"
+                  />
+
+                  {/* Upload Button */}
+                  <button
+                    onClick={() => document.getElementById('modal-file-upload')?.click()}
+                    className="w-full mt-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-3 px-6 rounded-xl transition-all hover:scale-[1.02] hover:shadow-lg flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Upload Photos
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* AI Loading Animation */}
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="relative w-24 h-24 mb-6">
+                      {/* Outer rotating ring */}
+                      <div className="absolute inset-0 rounded-full border-4 border-orange-500/20"></div>
+                      <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-orange-500 animate-spin"></div>
+                      
+                      {/* Middle pulsing ring */}
+                      <div className="absolute inset-2 rounded-full border-4 border-orange-400/30 animate-pulse"></div>
+                      
+                      {/* Inner rotating ring (reverse) */}
+                      <div className="absolute inset-4 rounded-full border-4 border-transparent border-b-orange-300 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                      
+                      {/* Center AI icon */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <svg className="w-10 h-10 text-orange-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          <circle cx="8" cy="9" r="1" fill="currentColor" />
+                          <circle cx="12" cy="9" r="1" fill="currentColor" />
+                          <circle cx="16" cy="9" r="1" fill="currentColor" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Loading text with gradient */}
+                    <h3 className="text-xl font-bold bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 bg-clip-text text-transparent mb-2">
+                      Analyzing with AI
+                    </h3>
+                    <p className="text-stone-400 text-sm">
+                      Detecting landmarks in your photos...
+                    </p>
+
+                    {/* Progress dots */}
+                    <div className="flex gap-2 mt-6">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                      <div className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purple Fallback Modal - "Thinking Harder" */}
+      {showFallbackModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[10000] p-4">
+          <div className="bg-gradient-to-br from-purple-900/50 to-black border border-purple-700/50 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-12 flex flex-col items-center justify-center space-y-6">
+              {/* Triple rotating rings - larger */}
+              <div className="relative w-24 h-24">
+                {/* Outer rotating ring */}
+                <div className="absolute inset-0 rounded-full border-4 border-purple-500/20"></div>
+                <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-purple-500 animate-spin"></div>
+                
+                {/* Middle pulsing ring */}
+                <div className="absolute inset-3 rounded-full border-4 border-purple-400/30 animate-pulse"></div>
+                
+                {/* Inner rotating ring (reverse, faster) */}
+                <div className="absolute inset-6 rounded-full border-4 border-transparent border-b-purple-300 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1s' }}></div>
+                
+                {/* Center brain/thinking icon */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-purple-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Loading text with gradient */}
+              <div className="text-center">
+                <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-400 via-purple-500 to-purple-600 bg-clip-text text-transparent mb-3">
+                  Thinking Harder...
+                </h3>
+                <p className="text-purple-300/80 text-sm">
+                  Using CLIP + Groq AI for deeper analysis
+                </p>
+              </div>
+
+              {/* Progress dots */}
+              <div className="flex gap-2">
+                <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fallback Confirmation Modal */}
+      {fallbackConfirmModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[10001] p-4">
+          <div className="bg-gradient-to-br from-zinc-900 to-black border border-purple-700/50 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-900/30 to-purple-800/20 border-b border-purple-700/30 px-6 py-4">
+              <h2 className="text-2xl font-bold text-stone-100">AI Analysis Result</h2>
+              <p className="text-purple-300 text-sm mt-1">Confirm if this matches your photo</p>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Landmark Name */}
+              <div className="text-center">
+                <h3 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent">
+                  {fallbackConfirmModal.landmarkName}
+                </h3>
+                {fallbackConfirmModal.confidence && !isNaN(fallbackConfirmModal.confidence) && (
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <div className="px-3 py-1 bg-purple-500/20 border border-purple-500/30 rounded-full">
+                      <span className="text-purple-300 text-sm font-medium">
+                        {(fallbackConfirmModal.confidence * 100).toFixed(1)}% Match
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Image */}
+              {fallbackConfirmModal.image && (
+                <div className="relative w-full h-80 bg-zinc-800 rounded-xl overflow-hidden">
+                  <img
+                    src={fallbackConfirmModal.image}
+                    alt={fallbackConfirmModal.landmarkName}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+
+              {/* AI Analysis - Formatted */}
+              <div className="bg-gradient-to-br from-purple-900/20 to-purple-800/10 border border-purple-700/30 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <h4 className="text-lg font-semibold text-purple-300">AI Vision Analysis</h4>
+                </div>
+                <p className="text-stone-300 leading-relaxed text-base whitespace-pre-wrap">
+                  {fallbackConfirmModal.visionDescription}
+                </p>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleRejectFallbackLocation}
+                  className="flex-1 bg-zinc-800/50 hover:bg-zinc-800 border border-stone-700 hover:border-red-500/50 text-stone-300 hover:text-red-400 font-semibold py-4 px-6 rounded-xl transition-all duration-200"
+                >
+                  No, This Isn't Right
+                </button>
+                <button
+                  onClick={handleConfirmFallbackLocation}
+                  className="flex-1 bg-zinc-800/50 hover:bg-zinc-800 border-2 border-purple-500 hover:border-purple-400 text-purple-300 hover:text-purple-200 font-semibold py-4 px-6 rounded-xl transition-all duration-200"
+                >
+                  Yes, Add to Itinerary
+                </button>
               </div>
             </div>
           </div>

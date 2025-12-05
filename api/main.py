@@ -14,7 +14,7 @@ Date: January 2025
 
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, HTTPBearer as HTTPBearerOptional
 from pydantic import BaseModel, EmailStr, Field, validator
 from typing import List, Optional, Dict, Any
 from pathlib import Path
@@ -66,6 +66,7 @@ app.add_middleware(
 
 # Security
 security = HTTPBearer()
+security_optional = HTTPBearer(auto_error=False)  # Optional auth for testing
 
 # DynamoDB client
 dynamodb = boto3.resource(
@@ -116,9 +117,10 @@ def get_landmark_detector():
             image.save(img_byte_arr, format='JPEG')
             img_byte_arr.seek(0)
             
-            # Call HF Space
-            files = {'image': ('image.jpg', img_byte_arr, 'image/jpeg')}
-            response = requests.post(HF_SPACE_URL, files=files, timeout=30)
+            # Call HF Space with correct parameter name
+            files = {'file': ('image.jpg', img_byte_arr, 'image/jpeg')}
+            data = {'top_k': top_k}
+            response = requests.post(HF_SPACE_URL, files=files, data=data, timeout=30)
             response.raise_for_status()
             
             result = response.json()
@@ -631,7 +633,7 @@ def decode_image_from_base64(image_data: str) -> Image.Image:
 async def predict_landmark(
     image: str = None,  # Base64 encoded image
     file: UploadFile = File(None),  # Or file upload
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security_optional)
 ):
     """
     Predict landmark from uploaded image.
@@ -643,7 +645,7 @@ async def predict_landmark(
     
     Returns predictions with confidence levels and recommendation strategy.
     """
-    user_id = require_auth(credentials.credentials)
+    user_id = require_auth(credentials.credentials) if credentials else "anonymous"
     
     # Load image
     if file:
@@ -687,9 +689,29 @@ async def predict_landmark(
         prediction_id = f"{user_id}#{int(datetime.utcnow().timestamp() * 1000)}"
         
         # Convert image to base64 for storage (needed for fallback)
+        # Resize and compress heavily to fit DynamoDB 400KB limit
         img_byte_arr = io.BytesIO()
-        image_pil.save(img_byte_arr, format='JPEG', quality=85)
+        
+        # Resize to max 800px on longest side
+        max_size = 800
+        ratio = min(max_size / image_pil.width, max_size / image_pil.height)
+        if ratio < 1:
+            new_size = (int(image_pil.width * ratio), int(image_pil.height * ratio))
+            image_pil = image_pil.resize(new_size, Image.LANCZOS)
+        
+        # Save with low quality for storage
+        image_pil.save(img_byte_arr, format='JPEG', quality=30)
         img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+        
+        # Convert floats to strings for DynamoDB (avoid Decimal issues)
+        predictions_for_db = [
+            {
+                'landmark': p['landmark'],
+                'confidence': str(p['confidence']),
+                'class_idx': p['class_idx']
+            }
+            for p in predictions
+        ]
         
         table.put_item(Item={
             'PK': f'USER#{user_id}',
@@ -698,7 +720,7 @@ async def predict_landmark(
             'image_base64': img_base64,  # Store for fallback
             'top_prediction': predictions[0]['landmark'],
             'top_confidence': str(predictions[0]['confidence']),
-            'all_predictions': predictions,
+            'all_predictions': predictions_for_db,
             'confidence_level': confidence_level,
             'timestamp': datetime.utcnow().isoformat(),
             'fallback_used': False,
@@ -721,7 +743,7 @@ async def predict_landmark(
 @app.post("/predict/fallback/{prediction_id}", response_model=FallbackAnalysisResponse)
 async def fallback_analysis(
     prediction_id: str,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security_optional)
 ):
     """
     STEP 2: Fallback analysis with CLIP + Groq vision.
@@ -729,7 +751,7 @@ async def fallback_analysis(
     Called when user rejects the initial EfficientNet prediction.
     Retrieves stored image and runs advanced models for better recommendations.
     """
-    user_id = require_auth(credentials.credentials)
+    user_id = require_auth(credentials.credentials) if credentials else "anonymous"
     
     try:
         # Retrieve prediction from DynamoDB
