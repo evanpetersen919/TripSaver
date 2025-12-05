@@ -111,51 +111,46 @@ class ClipEmbedder:
 
 
 class LLaVAAnalyzer:
-    """LLaVA 1.6 Mistral 7B vision-language model (faster variant)."""
+    """Moondream2 1.8B vision-language model (CPU-optimized, 10x faster than LLaVA)."""
     
-    def __init__(self, model_name: str = "llava-hf/llava-v1.6-mistral-7b-hf"):
+    def __init__(self, model_name: str = "vikhyatk/moondream2"):
         try:
-            from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, BitsAndBytesConfig
+            from transformers import AutoModelForCausalLM, AutoTokenizer
             
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             
-            # 8-bit quantization for better CPU performance
-            quantization_config = BitsAndBytesConfig(
-                load_in_8bit=True,
-                bnb_8bit_compute_dtype=torch.float16
-            )
-            
-            self.processor = LlavaNextProcessor.from_pretrained(model_name)
-            self.model = LlavaNextForConditionalGeneration.from_pretrained(
+            # Moondream2 is designed for CPU inference - no quantization needed
+            self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                quantization_config=quantization_config,
-                device_map="auto",
+                trust_remote_code=True,
+                torch_dtype=torch.float32 if self.device.type == 'cpu' else torch.float16,
                 low_cpu_mem_usage=True
-            )
+            ).to(self.device)
+            
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            self.model.eval()
             
         except Exception as e:
-            print(f"LLaVA initialization failed: {e}")
+            print(f"Moondream2 initialization failed: {e}")
             self.model = None
     
     def analyze_scene(self, image: Image.Image, prompt: Optional[str] = None) -> str:
         if self.model is None:
-            return "LLaVA model not available"
+            return "Vision-language model not available"
         
         if prompt is None or not prompt.strip():
-            prompt = "USER: <image>\nDescribe this landmark in detail. Include its name, location, and notable features.\nASSISTANT:"
-        else:
-            prompt = f"USER: <image>\n{prompt}\nASSISTANT:"
+            prompt = "Describe this landmark in detail. Include its name, location, and notable features."
         
-        inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
-        
-        output = self.model.generate(**inputs, max_new_tokens=150, do_sample=False)
-        description = self.processor.decode(output[0], skip_special_tokens=True)
-        
-        # Extract assistant response
-        if "ASSISTANT:" in description:
-            description = description.split("ASSISTANT:")[-1].strip()
-        
-        return description
+        try:
+            # Moondream2 uses a simpler interface
+            description = self.model.answer_question(
+                self.model.encode_image(image), 
+                prompt, 
+                self.tokenizer
+            )
+            return description
+        except Exception as e:
+            return f"Analysis failed: {str(e)}"
 
 
 # ============================================================================
@@ -185,9 +180,9 @@ def get_clip_embedder():
 def get_llava_analyzer():
     global llava_analyzer
     if llava_analyzer is None:
-        print("Loading LLaVA-1.5-7B...")
+        print("Loading Moondream2-1.8B...")
         llava_analyzer = LLaVAAnalyzer()
-        print("✓ LLaVA loaded")
+        print("✓ Moondream2 loaded")
     return llava_analyzer
 
 
@@ -244,7 +239,7 @@ async def root():
         <ul>
             <li>EfficientNet-B3: 500 landmark classes (81.37% accuracy)</li>
             <li>CLIP ViT-B/32: Visual similarity & text-to-image search</li>
-            <li>LLaVA-1.6-Mistral-7B: Natural language scene understanding (optimized)</li>
+            <li>Moondream2 1.8B: Natural language scene understanding (CPU-optimized)</li>
         </ul>
         
         <div class="section">
@@ -397,7 +392,7 @@ async def analyze_with_llava(file: UploadFile = File(...), prompt: Optional[str]
         return JSONResponse({
             "success": True,
             "description": description,
-            "model": "LLaVA-1.6-Mistral-7B"
+            "model": "Moondream2-1.8B"
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -425,7 +420,7 @@ async def complete_pipeline(file: UploadFile = File(...)):
             "landmark_predictions": predictions,
             "clip_embedding_dim": len(embedding),
             "llava_description": description,
-            "models_used": ["EfficientNet-B3", "CLIP ViT-B/32", "LLaVA-1.6-Mistral-7B"]
+            "models_used": ["EfficientNet-B3", "CLIP ViT-B/32", "Moondream2-1.8B"]
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
