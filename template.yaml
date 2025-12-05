@@ -18,6 +18,7 @@ Globals:
       Variables:
         DYNAMODB_TABLE: !Ref LocationClassifierTable
         HUGGINGFACE_API_TOKEN: !Ref HuggingFaceAPIToken
+        GROQ_API_KEY: !Ref GroqAPIKey
         JWT_SECRET: !Ref JWTSecret
         ALLOWED_ORIGINS: !Ref AllowedOrigins
     # Layers:
@@ -36,7 +37,12 @@ Parameters:
   HuggingFaceAPIToken:
     Type: String
     NoEcho: true
-    Description: Hugging Face API token for LLaVA inference
+    Description: Hugging Face API token for CLIP embeddings
+    
+  GroqAPIKey:
+    Type: String
+    NoEcho: true
+    Description: Groq API key for FREE fast vision model inference (Llama 4 Scout)
     
   JWTSecret:
     Type: String
