@@ -279,15 +279,15 @@ def get_recommendation_engine():
                     return lm
             return None
         
-        def recommend(self, itinerary_landmarks: List[str], llava_description: str,
+        def recommend(self, itinerary_landmarks: List[str], vision_description: str,
                      max_distance_km: Optional[float] = 50.0, top_k: int = 5,
                      clip_embedding: Optional[np.ndarray] = None) -> List[Recommendation]:
             """Proximity + semantic/keyword similarity recommendations"""
             if not itinerary_landmarks or max_distance_km is None:
-                return self.search_by_description(llava_description, None, top_k, 0.1)
+                return self.search_by_description(vision_description, None, top_k, 0.1)
             
             # Compute query embedding once
-            query_embedding = self.compute_query_embedding(llava_description)
+            query_embedding = self.compute_query_embedding(vision_description)
             
             # Get center of itinerary
             coords = []
@@ -319,7 +319,7 @@ def get_recommendation_engine():
                         sim = self.semantic_similarity(query_embedding, lm['landmark_id'])
                     else:
                         desc = lm.get('description', lm['name'])
-                        sim = self.keyword_similarity(llava_description, desc)
+                        sim = self.keyword_similarity(vision_description, desc)
                     
                     # Combined score
                     proximity_score = 1 - (dist / max_distance_km)
@@ -353,12 +353,12 @@ def get_recommendation_engine():
             results.sort(key=lambda x: x.final_score, reverse=True)
             return results[:top_k]
         
-        def search_by_description(self, llava_description: str,
+        def search_by_description(self, vision_description: str,
                                  clip_embedding: Optional[np.ndarray] = None,
                                  top_k: int = 10, min_similarity: float = 0.1) -> List[Dict[str, Any]]:
             """Global search using semantic or keyword matching"""
             # Compute query embedding once
-            query_embedding = self.compute_query_embedding(llava_description)
+            query_embedding = self.compute_query_embedding(vision_description)
             
             results = []
             for lm in self.landmarks:
@@ -367,7 +367,7 @@ def get_recommendation_engine():
                     sim = self.semantic_similarity(query_embedding, lm['landmark_id'])
                 else:
                     desc = lm.get('description', lm['name'])
-                    sim = self.keyword_similarity(llava_description, desc)
+                    sim = self.keyword_similarity(vision_description, desc)
                 
                 if sim >= min_similarity:
                     results.append({
@@ -429,7 +429,7 @@ class PredictResponse(BaseModel):
 
 
 class FallbackAnalysisResponse(BaseModel):
-    llava_description: str
+    vision_description: str
     clip_embedding_dim: int
     recommendations: List[Dict[str, Any]]
     search_mode: str
@@ -437,7 +437,7 @@ class FallbackAnalysisResponse(BaseModel):
 
 class RecommendationRequest(BaseModel):
     itinerary_landmarks: List[str] = Field(default_factory=list)
-    llava_description: str
+    vision_description: str
     clip_embedding: Optional[List[float]] = None
     max_distance_km: Optional[float] = 50.0
     top_k: int = Field(default=5, ge=1, le=20)
@@ -638,7 +638,7 @@ async def predict_landmark(
     
     Uses:
     1. EfficientNet landmark detector (500 classes)
-    2. LLaVA via Hugging Face API (scene understanding)
+    2. Groq Llama 4 Scout for vision analysis (when needed in fallback)
     3. CLIP embedder (visual similarity)
     
     Returns predictions with confidence levels and recommendation strategy.
@@ -660,7 +660,7 @@ async def predict_landmark(
     
     try:
         # STEP 1: Run ONLY EfficientNet landmark detector
-        # CLIP + LLaVA will only run if user rejects this result
+        # CLIP + Groq vision will only run if user rejects this result
         detector = get_landmark_detector()
         predictions = detector.predict(image_pil, top_k=5)
         
@@ -724,7 +724,7 @@ async def fallback_analysis(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
-    STEP 2: Fallback analysis with CLIP + LLaVA.
+    STEP 2: Fallback analysis with CLIP + Groq vision.
     
     Called when user rejects the initial EfficientNet prediction.
     Retrieves stored image and runs advanced models for better recommendations.
@@ -757,7 +757,7 @@ async def fallback_analysis(
         image_data = base64.b64decode(img_base64)
         image_pil = Image.open(io.BytesIO(image_data)).convert('RGB')
         
-        # Call HuggingFace Space for CLIP + LLaVA
+        # Call HuggingFace Space for CLIP + Groq for vision
         HF_SPACE_URL = "https://evanpetersen919-cv-location-classifier.hf.space"
         
         # Prepare image for upload
@@ -807,14 +807,14 @@ async def fallback_analysis(
             timeout=30
         )
         groq_response.raise_for_status()
-        llava_description = groq_response.json()['choices'][0]['message']['content']
+        vision_description = groq_response.json()['choices'][0]['message']['content']
         
         # 3. Get semantic recommendations
         engine = get_recommendation_engine()
         clip_embedding_np = np.array(clip_embedding, dtype=np.float32)
         
         recs = engine.search_by_description(
-            llava_description=llava_description,
+            vision_description=vision_description,
             clip_embedding=clip_embedding_np,
             top_k=10,
             min_similarity=0.3
@@ -826,16 +826,16 @@ async def fallback_analysis(
                 'PK': f'USER#{user_id}',
                 'SK': f'PREDICTION#{prediction_id}'
             },
-            UpdateExpression='SET fallback_used = :used, llava_description = :desc, clip_embedding_dim = :dim',
+            UpdateExpression='SET fallback_used = :used, vision_description = :desc, clip_embedding_dim = :dim',
             ExpressionAttributeValues={
                 ':used': True,
-                ':desc': llava_description,
+                ':desc': vision_description,
                 ':dim': clip_dim
             }
         )
         
         return FallbackAnalysisResponse(
-            llava_description=llava_description,
+            vision_description=vision_description,
             clip_embedding_dim=clip_dim,
             recommendations=recs,
             search_mode='semantic'
@@ -879,7 +879,7 @@ async def get_recommendations(
         if is_global_search:
             # Global content-based search
             results = engine.search_by_description(
-                llava_description=request.llava_description,
+                vision_description=request.vision_description,
                 clip_embedding=clip_embedding,
                 top_k=request.top_k,
                 min_similarity=0.3
@@ -889,7 +889,7 @@ async def get_recommendations(
             # Proximity-based search
             recs = engine.recommend(
                 itinerary_landmarks=request.itinerary_landmarks,
-                llava_description=request.llava_description,
+                vision_description=request.vision_description,
                 max_distance_km=request.max_distance_km,
                 top_k=request.top_k,
                 clip_embedding=clip_embedding
@@ -1082,9 +1082,9 @@ async def get_info():
                     "num_classes": detector.num_classes,
                     "architecture": "EfficientNet-B3"
                 },
-                "llava": {
-                    "provider": "Hugging Face Inference API",
-                    "model": "llava-hf/llava-1.5-7b-hf"
+                "vision_model": {
+                    "provider": "Groq API (FREE)",
+                    "model": "meta-llama/llama-4-scout-17b-16e-instruct"
                 },
                 "clip": {
                     "architecture": "CLIP ViT-B/32"

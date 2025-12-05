@@ -148,7 +148,7 @@
         {"landmark": "Notre-Dame Cathedral", "confidence": 0.92},
         {"landmark": "Sainte-Chapelle", "confidence": 0.05}
       ],
-      "llava_description": "Gothic cathedral with stained glass...",
+      "vision_description": "Gothic cathedral with stained glass... (from Groq)",
       "clip_embedding": "[512 floats array]",
       "recommendations": "[array of recommended landmarks]",
       "inference_time_ms": 245.3,
