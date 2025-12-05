@@ -39,7 +39,6 @@ from core.auth import (
     signup, login, require_auth, request_password_reset, 
     reset_password, decode_access_token
 )
-from models.huggingface_client import HuggingFaceClient
 # LandmarkDetector now called via HF Space API
 # ClipEmbedder and RecommendationEngine disabled for Lambda (torch dependencies)
 # from models.clip_embedder import ClipEmbedder
@@ -80,21 +79,10 @@ table = dynamodb.Table(os.getenv('DYNAMODB_TABLE', 'cv-location-app'))
 # GLOBAL MODEL INSTANCES (lazy loaded for Lambda cold start optimization)
 # ============================================================================
 
-huggingface_client = None
-# landmark_detector now via HF Space (no global state)
-# clip_embedder = None  # Disabled for Lambda
-# recommendation_engine = None  # Disabled for Lambda
-
-
-def get_huggingface_client():
-    """Lazy load Hugging Face client"""
-    global huggingface_client
-    if huggingface_client is None:
-        hf_token = os.getenv('HUGGINGFACE_API_TOKEN')
-        if not hf_token:
-            raise ValueError("HUGGINGFACE_API_TOKEN not set in environment")
-        huggingface_client = HuggingFaceClient(api_token=hf_token)
-    return huggingface_client
+# All models now external:
+# - EfficientNet + CLIP: HuggingFace Space
+# - Vision analysis: Groq API
+# - No local model loading needed
 
 
 def get_landmark_detector():
