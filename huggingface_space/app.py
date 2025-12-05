@@ -110,47 +110,7 @@ class ClipEmbedder:
         return text_features.cpu().numpy()[0]
 
 
-class LLaVAAnalyzer:
-    """Moondream2 1.8B vision-language model (CPU-optimized, 10x faster than LLaVA)."""
-    
-    def __init__(self, model_name: str = "vikhyatk/moondream2"):
-        try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-            
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            
-            # Moondream2 is designed for CPU inference - no quantization needed
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                trust_remote_code=True,
-                torch_dtype=torch.float32 if self.device.type == 'cpu' else torch.float16,
-                low_cpu_mem_usage=True
-            ).to(self.device)
-            
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-            self.model.eval()
-            
-        except Exception as e:
-            print(f"Moondream2 initialization failed: {e}")
-            self.model = None
-    
-    def analyze_scene(self, image: Image.Image, prompt: Optional[str] = None) -> str:
-        if self.model is None:
-            return "Vision-language model not available"
-        
-        if prompt is None or not prompt.strip():
-            prompt = "Describe this landmark in detail. Include its name, location, and notable features."
-        
-        try:
-            # Moondream2 uses a simpler interface
-            description = self.model.answer_question(
-                self.model.encode_image(image), 
-                prompt, 
-                self.tokenizer
-            )
-            return description
-        except Exception as e:
-            return f"Analysis failed: {str(e)}"
+# Vision-language analysis now handled by Groq API (not on this Space)
 
 
 # ============================================================================
@@ -159,7 +119,6 @@ class LLaVAAnalyzer:
 
 detector = None
 clip_embedder = None
-llava_analyzer = None
 
 def get_detector():
     global detector
@@ -177,13 +136,7 @@ def get_clip_embedder():
         print("✓ CLIP loaded")
     return clip_embedder
 
-def get_llava_analyzer():
-    global llava_analyzer
-    if llava_analyzer is None:
-        print("Loading Moondream2-1.8B...")
-        llava_analyzer = LLaVAAnalyzer()
-        print("✓ Moondream2 loaded")
-    return llava_analyzer
+# Vision analysis now done via Groq API on Lambda side
 
 
 # ============================================================================
@@ -192,7 +145,7 @@ def get_llava_analyzer():
 
 app = FastAPI(
     title="CV Location Classifier API",
-    description="Multi-model vision pipeline with EfficientNet, CLIP, and LLaVA",
+    description="Vision models: EfficientNet-B3 + CLIP (Vision analysis via Groq API)",
     version="2.0"
 )
 
@@ -235,11 +188,11 @@ async def root():
     </head>
     <body>
         <h1>🗺️ CV Location Classifier API</h1>
-        <p><strong>Multi-Model Vision Pipeline</strong></p>
+        <p><strong>Lightweight Vision Pipeline</strong></p>
         <ul>
             <li>EfficientNet-B3: 500 landmark classes (81.37% accuracy)</li>
             <li>CLIP ViT-B/32: Visual similarity & text-to-image search</li>
-            <li>Moondream2 1.8B: Natural language scene understanding (CPU-optimized)</li>
+            <li>Vision analysis: Handled by Groq API (Llama 4 Scout 17B) on Lambda side</li>
         </ul>
         
         <div class="section">
@@ -261,18 +214,6 @@ async def root():
                 <span class="method">POST</span> <code>/clip/text</code>
                 <p>Get CLIP embedding for text query</p>
                 <p><strong>Params:</strong> text (string)</p>
-            </div>
-            
-            <div class="endpoint">
-                <span class="method">POST</span> <code>/llava</code>
-                <p>Analyze image with LLaVA vision-language model</p>
-                <p><strong>Params:</strong> file (image), prompt (string, optional)</p>
-            </div>
-            
-            <div class="endpoint">
-                <span class="method">POST</span> <code>/pipeline</code>
-                <p>Run all three models on one image</p>
-                <p><strong>Params:</strong> file (image)</p>
             </div>
             
             <div class="endpoint">
@@ -305,9 +246,9 @@ async def health():
         "status": "healthy",
         "models_loaded": {
             "efficientnet": detector is not None,
-            "clip": clip_embedder is not None,
-            "llava": llava_analyzer is not None
-        }
+            "clip": clip_embedder is not None
+        },
+        "note": "Vision analysis handled by Groq API (not on this Space)"
     }
 
 
@@ -379,51 +320,8 @@ async def clip_text_embedding(text: str = Form(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/llava")
-async def analyze_with_llava(file: UploadFile = File(...), prompt: Optional[str] = Form(None)):
-    """Analyze image with LLaVA."""
-    try:
-        image_data = await file.read()
-        image = Image.open(io.BytesIO(image_data)).convert('RGB')
-        
-        llava = get_llava_analyzer()
-        description = llava.analyze_scene(image, prompt=prompt)
-        
-        return JSONResponse({
-            "success": True,
-            "description": description,
-            "model": "Moondream2-1.8B"
-        })
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/pipeline")
-async def complete_pipeline(file: UploadFile = File(...)):
-    """Run all three models."""
-    try:
-        image_data = await file.read()
-        image = Image.open(io.BytesIO(image_data)).convert('RGB')
-        
-        # Load all models
-        det = get_detector()
-        clip = get_clip_embedder()
-        llava = get_llava_analyzer()
-        
-        # Run predictions
-        predictions = det.predict(image, top_k=3)
-        embedding = clip.encode_image(image)
-        description = llava.analyze_scene(image)
-        
-        return JSONResponse({
-            "success": True,
-            "landmark_predictions": predictions,
-            "clip_embedding_dim": len(embedding),
-            "llava_description": description,
-            "models_used": ["EfficientNet-B3", "CLIP ViT-B/32", "Moondream2-1.8B"]
-        })
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Vision analysis endpoints removed - now handled by Groq API on Lambda side
+# This Space only provides EfficientNet and CLIP models
 
 
 # ============================================================================
