@@ -12,7 +12,7 @@ license: mit
 
 # 🗺️ CV Location Classifier - Multi-Model Vision Pipeline
 
-**Three powerful AI models working together:** EfficientNet-B3, CLIP ViT-B/32, and LLaVA-1.5-7B
+**Two powerful AI models on HuggingFace Space:** EfficientNet-B3 and CLIP ViT-B/32 (vision analysis powered by Groq API)
 
 ## 🚀 Features
 

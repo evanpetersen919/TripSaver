@@ -1,6 +1,7 @@
 # 🚀 Deploying CV Location Classifier to Hugging Face Spaces
 
-Complete guide to deploy CLIP + LLaVA + EfficientNet to HuggingFace for GPU-powered inference.
+Complete guide to deploy EfficientNet-B3 + CLIP to HuggingFace Space (FREE CPU tier).
+Vision-language analysis powered by Groq API (FREE, ultra-fast).
 
 ## 📋 Prerequisites
 
@@ -72,7 +73,7 @@ git add .gitattributes
 git add app.py requirements.txt README.md landmark_detector_500classes_best.pth
 
 # Commit
-git commit -m "Initial deployment: CLIP + LLaVA + EfficientNet pipeline"
+git commit -m "Initial deployment: EfficientNet + CLIP pipeline (vision via Groq)"
 
 # Push to space
 git push space main
@@ -83,7 +84,7 @@ git push space main
 - Go to your Space URL: `https://huggingface.co/spaces/YOUR-USERNAME/cv-location-classifier`
 - HuggingFace will automatically:
   - Install dependencies (~5-10 minutes)
-  - Download CLIP (~338MB) and LLaVA (~13GB)
+  - Download CLIP (~338MB) and Moondream2 (~1.8GB, optional)
   - Build and start the app
 - First build takes 10-15 minutes
 
@@ -121,13 +122,13 @@ response = requests.post(
 )
 print("CLIP:", response.json())
 
-# 3. Test LLaVA Analysis
+# 3. Test CLIP Embedding
 img_bytes.seek(0)
 response = requests.post(
-    f"{SPACE_URL}/api/analyze_with_llava",
-    files={"data": img_bytes}
+    f"{SPACE_URL}/clip/image",
+    files={"file": img_bytes}
 )
-print("LLaVA:", response.json())
+print("CLIP Embedding:", response.json())
 ```
 
 ## 🔗 Connect Lambda to HuggingFace Space
@@ -146,7 +147,7 @@ HUGGINGFACE_SPACE_URL = os.getenv('HUGGINGFACE_SPACE_URL',
 
 @app.post("/vision/analyze")
 async def analyze_image(file: UploadFile = File(...)):
-    """Analyze image using CLIP + LLaVA on HuggingFace Space."""
+    """Analyze image using CLIP on HuggingFace Space + Groq vision."""
     
     # Read image
     contents = await file.read()
@@ -165,25 +166,28 @@ async def analyze_image(file: UploadFile = File(...)):
     )
     clip_result = response.json()
     
-    # Get LLaVA description
-    img_bytes.seek(0)
-    response = requests.post(
-        f"{HUGGINGFACE_SPACE_URL}/api/analyze_with_llava",
-        files={"data": img_bytes},
+    # Get vision description from Groq (FREE, ultra-fast)
+    groq_response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}"},
+        json={
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+            "messages": [{...}]  # See api/main.py for full implementation
+        },
         timeout=30
     )
-    llava_result = response.json()
+    vision_description = groq_response.json()['choices'][0]['message']['content']
     
     return {
         "clip_embedding": clip_result.get("embedding"),
-        "description": llava_result.get("description"),
+        "description": vision_description,
         "success": True
     }
 ```
 
 ## ⚙️ Hardware Recommendations
 
-| Hardware | CLIP | LLaVA | EfficientNet | Cost |
+| Hardware | CLIP | EfficientNet | Vision (Groq) | Cost |
 |----------|------|-------|--------------|------|
 | **CPU Basic** | ✅ ~2s | ⚠️ ~20-30s | ✅ ~1s | **FREE** |
 | **CPU Upgrade** | ✅ ~1s | ✅ ~8-10s | ✅ ~500ms | $0.03/hr |
@@ -223,7 +227,7 @@ bitsandbytes>=0.41.0
 
 ### Out of Memory
 
-1. Use CPU Basic (free) - LLaVA loads with 4-bit quantization
+1. Use CPU Basic (free) - sufficient for CLIP + EfficientNet
 2. Or upgrade to T4 GPU ($0.60/hr)
 
 ### Model Download Slow
@@ -237,7 +241,7 @@ First build downloads ~14GB of models. This is normal and cached for future buil
 pip install open-clip-torch
 ```
 
-### LLaVA Not Working
+### Vision Model Not Working
 
 ```python
 # Check transformers version

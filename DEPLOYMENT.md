@@ -299,7 +299,7 @@ curl -X POST $API_ENDPOINT/recommend \
   -H "Content-Type: application/json" \
   -d '{
     "itinerary_landmarks": ["Eiffel Tower"],
-    "llava_description": "historic monument with architecture",
+    "vision_description": "historic monument with architecture",
     "max_distance_km": 50,
     "top_k": 5
   }'
@@ -520,14 +520,14 @@ sam delete --stack-name cv-location-classifier
 - ✅ Single-command deployment with SAM (`sam build && sam deploy`)
 - ✅ DynamoDB single-table design with GSI indexes
 - ✅ JWT authentication with bcrypt password hashing
-- ✅ Offloaded LLaVA inference to Hugging Face GPU (free tier)
+- ✅ Using Groq API for FREE ultra-fast vision inference (Llama 4 Scout)
 - ✅ Lambda layers for efficient packaging (<250 MB)
 - ✅ RESTful API with OpenAPI docs (`/docs` endpoint)
 - ✅ Serverless architecture with auto-scaling
 
 **Tech Stack:**
 Backend: Python, FastAPI, PyTorch, Transformers  
-ML Models: EfficientNet-B3, CLIP, LLaVA  
+ML Models: EfficientNet-B3, CLIP (HF Space), Llama 4 Scout (Groq)  
 Infrastructure: AWS Lambda, API Gateway, DynamoDB, SAM  
 Authentication: JWT, bcrypt  
 Deployment: Infrastructure as Code, CloudFormation

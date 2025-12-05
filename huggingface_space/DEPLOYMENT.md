@@ -1,15 +1,20 @@
 # Instructions for Deploying to Hugging Face Spaces
 
+## Overview
+
+This Space hosts EfficientNet-B3 (500 landmark classes) and CLIP ViT-B/32 for visual embeddings.
+Vision-language analysis is handled by Groq API (FREE, ultra-fast) instead of running models on CPU.
+
 ## Step 1: Create the Space
 
 1. Go to https://huggingface.co/spaces
 2. Click "Create new Space"
 3. Configure:
    - **Owner**: evanpetersen919 (your username)
-   - **Space name**: `landmark-detector`
+   - **Space name**: `cv-location-classifier`
    - **License**: MIT
-   - **SDK**: Gradio
-   - **Hardware**: CPU Basic (free) - will auto-upgrade to GPU if available
+   - **SDK**: Docker
+   - **Hardware**: CPU Basic (FREE - sufficient for EfficientNet + CLIP)
    - **Visibility**: Public
 
 ## Step 2: Upload Files

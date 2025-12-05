@@ -11,7 +11,7 @@ A serverless AI travel companion that identifies landmarks in photos and recomme
 ## Key Features
 
 - **Landmark Detection**: EfficientNet-B3 trained on 500 landmark classes (~80% accuracy)
-- **Scene Understanding**: LLaVA-1.5 via Hugging Face API for natural language descriptions
+- **Scene Understanding**: Groq Llama 4 Scout for fast FREE vision-language analysis
 - **Visual Similarity**: CLIP embeddings for content-based landmark search
 - **Smart Recommendations**: Finds nearby attractions based on your itinerary + image features
 - **JWT Authentication**: Secure user accounts with bcrypt password hashing
@@ -35,10 +35,10 @@ A serverless AI travel companion that identifies landmarks in photos and recomme
        ├──→ DynamoDB (25GB - FREE)
        │    └─ Users, Itineraries, Predictions
        │
-       ├──→ Hugging Face API (1K/month - FREE)
-       │    └─ LLaVA-1.5-7B inference
+       ├──→ Groq API (FREE tier)
+       │    └─ Llama 4 Scout 17B vision model
        │
-       └──→ Local Models (Lambda CPU)
+       └──→ HuggingFace Space (FREE CPU)
             └─ EfficientNet-B3, CLIP
 ```
 
@@ -55,8 +55,8 @@ cv_pipeline/
 ├── models/                   # ML models
 │   ├── landmark_detector.py # EfficientNet-B3 (500 classes)
 │   ├── clip_embedder.py     # Visual similarity search
-│   ├── huggingface_client.py # LLaVA API integration
-│   └── llava_analyzer.py    # Local LLaVA (deprecated)
+│   ├── huggingface_client.py # HuggingFace Space integration
+│   └── (removed llava_analyzer.py - now using Groq)
 ├── aws/                      # AWS configuration
 │   ├── dynamodb_schema.json # Single-table design
 │   └── README.md            # DynamoDB documentation
@@ -224,7 +224,7 @@ Backend process:
 
 ### Predictions
 - `POST /predict` - Identify landmark in image
-- Returns: predictions, confidence, LLaVA description
+- Returns: predictions, confidence, vision description (via Groq)
 
 ### Recommendations
 - `POST /recommend` - Get nearby attractions
@@ -252,8 +252,8 @@ Backend process:
 - **Output**: Top-5 predictions with confidence scores
 - **Inference Time**: ~200ms on Lambda CPU
 
-### 2. LLaVA (Vision-Language Model)
-- **Model**: llava-hf/llava-1.5-7b-hf
+### 2. Groq Llama 4 Scout (Vision-Language Model)
+- **Model**: meta-llama/llama-4-scout-17b-16e-instruct
 - **Provider**: Hugging Face Inference API
 - **Purpose**: Natural language scene descriptions
 - **Rate Limit**: 1 request/second (free tier)
@@ -322,7 +322,7 @@ aws dynamodb scan --table-name cv-location-app --max-items 10
 
 **Completed:**
 - Landmark detection (EfficientNet-B3, 500 classes)
-- Scene understanding (LLaVA-1.5 via Hugging Face API)
+- Scene understanding (Llama 4 Scout via Groq API - FREE & fast)
 - Visual similarity search (CLIP embeddings)
 - User authentication (JWT + bcrypt)
 - DynamoDB single-table design with GSI indexes
@@ -343,6 +343,7 @@ MIT License - see [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Google Landmarks Dataset v2
-- Hugging Face for LLaVA API
+- Groq for FREE ultra-fast vision model inference
+- Hugging Face Spaces for model hosting
 - AWS for Always Free Tier
 - FastAPI and PyTorch communities
