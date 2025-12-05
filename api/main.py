@@ -434,10 +434,17 @@ class PasswordResetConfirm(BaseModel):
 
 class PredictResponse(BaseModel):
     predictions: List[Dict[str, Any]]
-    llava_description: Optional[str] = None
     confidence_level: str
     recommendation_strategy: str
     alternatives: Optional[List[str]] = None
+    prediction_id: str  # For fallback endpoint
+
+
+class FallbackAnalysisResponse(BaseModel):
+    llava_description: str
+    clip_embedding_dim: int
+    recommendations: List[Dict[str, Any]]
+    search_mode: str
 
 
 class RecommendationRequest(BaseModel):
@@ -664,22 +671,12 @@ async def predict_landmark(
         image_pil = image_pil.convert('RGB')
     
     try:
-        # 1. Run landmark detector
+        # STEP 1: Run ONLY EfficientNet landmark detector
+        # CLIP + LLaVA will only run if user rejects this result
         detector = get_landmark_detector()
         predictions = detector.predict(image_pil, top_k=5)
         
-        # 2. Run LLaVA via Hugging Face (for scene understanding)
-        hf_client = get_huggingface_client()
-        llava_result = hf_client.analyze_location(image_pil)
-        
-        llava_description = llava_result.get('description', '') if llava_result['success'] else None
-        
-        # 3. CLIP embedder disabled in Lambda (torch dependency)
-        # clip = get_clip_embedder()
-        # clip_embedding = clip.encode_image(image_pil)
-        clip_embedding = None
-        
-        # Determine recommendation strategy
+        # Determine confidence level
         top_confidence = predictions[0]['confidence']
         second_confidence = predictions[1]['confidence'] if len(predictions) > 1 else 0
         confidence_gap = top_confidence - second_confidence
@@ -698,33 +695,168 @@ async def predict_landmark(
             strategy = 'scene'
             alternatives = [p['landmark'] for p in predictions[:5]]
         
-        # Save prediction to DynamoDB
+        # Save prediction and IMAGE to DynamoDB for potential fallback
         prediction_id = f"{user_id}#{int(datetime.utcnow().timestamp() * 1000)}"
+        
+        # Convert image to base64 for storage (needed for fallback)
+        img_byte_arr = io.BytesIO()
+        image_pil.save(img_byte_arr, format='JPEG', quality=85)
+        img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
         
         table.put_item(Item={
             'PK': f'USER#{user_id}',
             'SK': f'PREDICTION#{prediction_id}',
             'prediction_id': prediction_id,
+            'image_base64': img_base64,  # Store for fallback
             'top_prediction': predictions[0]['landmark'],
             'top_confidence': str(predictions[0]['confidence']),
             'all_predictions': predictions,
-            'llava_description': llava_description,
             'confidence_level': confidence_level,
             'timestamp': datetime.utcnow().isoformat(),
+            'fallback_used': False,
             'GSI1_PK': f'PREDICTION#{prediction_id}',
             'GSI1_SK': 'METADATA'
         })
         
         return PredictResponse(
             predictions=predictions,
-            llava_description=llava_description,
             confidence_level=confidence_level,
             recommendation_strategy=strategy,
-            alternatives=alternatives
+            alternatives=alternatives,
+            prediction_id=prediction_id
         )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+
+@app.post("/predict/fallback/{prediction_id}", response_model=FallbackAnalysisResponse)
+async def fallback_analysis(
+    prediction_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    STEP 2: Fallback analysis with CLIP + LLaVA.
+    
+    Called when user rejects the initial EfficientNet prediction.
+    Retrieves stored image and runs advanced models for better recommendations.
+    """
+    user_id = require_auth(credentials.credentials)
+    
+    try:
+        # Retrieve prediction from DynamoDB
+        response = table.get_item(
+            Key={
+                'PK': f'USER#{user_id}',
+                'SK': f'PREDICTION#{prediction_id}'
+            }
+        )
+        
+        if 'Item' not in response:
+            raise HTTPException(status_code=404, detail="Prediction not found")
+        
+        item = response['Item']
+        
+        # Check if fallback already used
+        if item.get('fallback_used', False):
+            raise HTTPException(status_code=400, detail="Fallback already used for this prediction")
+        
+        # Decode image
+        img_base64 = item.get('image_base64')
+        if not img_base64:
+            raise HTTPException(status_code=400, detail="Image not found in prediction record")
+        
+        image_data = base64.b64decode(img_base64)
+        image_pil = Image.open(io.BytesIO(image_data)).convert('RGB')
+        
+        # Call HuggingFace Space for CLIP + LLaVA
+        HF_SPACE_URL = "https://evanpetersen919-cv-location-classifier.hf.space"
+        
+        # Prepare image for upload
+        img_byte_arr = io.BytesIO()
+        image_pil.save(img_byte_arr, format='JPEG')
+        img_byte_arr.seek(0)
+        files = {'file': ('image.jpg', img_byte_arr, 'image/jpeg')}
+        
+        # 1. Get CLIP embedding
+        clip_response = requests.post(f"{HF_SPACE_URL}/clip/image", files=files, timeout=30)
+        clip_response.raise_for_status()
+        clip_result = clip_response.json()
+        
+        if not clip_result.get('success'):
+            raise Exception(f"CLIP failed: {clip_result.get('error')}")
+        
+        clip_embedding = clip_result['embedding']
+        clip_dim = clip_result['dimension']
+        
+        # 2. Get vision description via Groq API (FREE, fast GPU inference)
+        groq_api_key = os.getenv('GROQ_API_KEY')
+        if not groq_api_key:
+            raise Exception("GROQ_API_KEY not set in environment")
+        
+        # Convert image to base64 for Groq
+        img_byte_arr.seek(0)
+        img_base64_groq = base64.b64encode(img_byte_arr.read()).decode('utf-8')
+        
+        groq_response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Describe this landmark in detail. Include its name if recognizable, architectural features, location characteristics, and notable details."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64_groq}"}}
+                    ]
+                }],
+                "max_completion_tokens": 300,
+                "temperature": 0.3
+            },
+            timeout=30
+        )
+        groq_response.raise_for_status()
+        llava_description = groq_response.json()['choices'][0]['message']['content']
+        
+        # 3. Get semantic recommendations
+        engine = get_recommendation_engine()
+        clip_embedding_np = np.array(clip_embedding, dtype=np.float32)
+        
+        recs = engine.search_by_description(
+            llava_description=llava_description,
+            clip_embedding=clip_embedding_np,
+            top_k=10,
+            min_similarity=0.3
+        )
+        
+        # 4. Update DynamoDB record
+        table.update_item(
+            Key={
+                'PK': f'USER#{user_id}',
+                'SK': f'PREDICTION#{prediction_id}'
+            },
+            UpdateExpression='SET fallback_used = :used, llava_description = :desc, clip_embedding_dim = :dim',
+            ExpressionAttributeValues={
+                ':used': True,
+                ':desc': llava_description,
+                ':dim': clip_dim
+            }
+        )
+        
+        return FallbackAnalysisResponse(
+            llava_description=llava_description,
+            clip_embedding_dim=clip_dim,
+            recommendations=recs,
+            search_mode='semantic'
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Fallback analysis failed: {str(e)}")
 
 
 # ============================================================================
