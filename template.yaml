@@ -216,6 +216,13 @@ Resources:
             Path: /predict/fallback/{prediction_id}
             Method: POST
         
+        PredictVisionAPI:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /predict/vision-api/{prediction_id}
+            Method: POST
+        
         # Recommendation endpoints
         Recommend:
           Type: Api
