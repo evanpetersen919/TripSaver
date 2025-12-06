@@ -357,13 +357,32 @@ export default function Dashboard() {
         const topRec = result.recommendations[0];
         console.log('Top recommendation:', topRec);
         
-        // Fetch photos and location details for the top recommendation
-        const placeData = await fetchPlacePhotos(topRec.name);
-        console.log('Place data for', topRec.name, ':', placeData);
+        // Show confirmation modal with AI analysis
+        // Prioritize vision_description (Groq analyzed the actual image) over topRec.description (database description)
+        const descriptionSource = result.vision_description || topRec.description || 'No description available';
+        // Strip markdown formatting (** **) from description
+        const cleanDescription = descriptionSource
+          .replace(/\*\*(.*?)\*\*/g, '$1')  // Remove **bold** markers
+          .replace(/\*(.*?)\*/g, '$1');      // Remove *italic* markers
         
-        // Use coordinates from recommendation or place data
-        const latitude = topRec.latitude || placeData.location?.latitude || (destinationLat + Math.random() * 0.1 - 0.05);
-        const longitude = topRec.longitude || placeData.location?.longitude || (destinationLng + Math.random() * 0.1 - 0.05);
+        // Extract landmark name from Groq vision description if available
+        let landmarkName = topRec.name;
+        if (result.vision_description) {
+          // Try to extract landmark name from first sentence (e.g., "The landmark in the image is the Itsukushima Shrine")
+          const nameMatch = result.vision_description.match(/(?:landmark in the image is|This is|famous|iconic)\s+(?:the\s+)?([^,\.]+(?:Shrine|Temple|Tower|Palace|Castle|Gate|Bridge|Monument|Building|Cathedral|Mosque|Church|Fort|Wall|Statue|Garden|Park|Falls|Mountain|Volcano|Island)[^,\.]*)/i);
+          if (nameMatch) {
+            landmarkName = nameMatch[1].trim();
+          }
+        }
+        
+        // Fetch photos and location for the GROQ-IDENTIFIED landmark (not CLIP match)
+        // This ensures photos match what Groq identified, not what CLIP guessed
+        const placeData = await fetchPlacePhotos(landmarkName);
+        console.log('Place data for Groq-identified landmark', landmarkName, ':', placeData);
+        
+        // Use coordinates from Groq-identified place, fallback to CLIP recommendation, then fallback coords
+        const latitude = placeData.location?.latitude || topRec.latitude || (destinationLat + Math.random() * 0.1 - 0.05);
+        const longitude = placeData.location?.longitude || topRec.longitude || (destinationLng + Math.random() * 0.1 - 0.05);
         
         const imageUrl = placeData.photos && placeData.photos.length > 0 ? placeData.photos[0].url : '';
         
@@ -371,15 +390,9 @@ export default function Dashboard() {
         setShowFallbackModal(false);
         setLoadingFallback(false);
         
-        // Show confirmation modal with AI analysis
-        // Strip markdown formatting (** **) from vision description
-        const cleanDescription = (result.vision_description || 'No description available')
-          .replace(/\*\*(.*?)\*\*/g, '$1')  // Remove **bold** markers
-          .replace(/\*(.*?)\*/g, '$1');      // Remove *italic* markers
-        
         setFallbackConfirmModal({
           show: true,
-          landmarkName: topRec.name,
+          landmarkName: landmarkName,
           visionDescription: cleanDescription,
           image: imageUrl,
           latitude,
@@ -2564,16 +2577,49 @@ export default function Dashboard() {
               )}
 
               {/* AI Analysis - Formatted */}
-              <div className="bg-gradient-to-br from-purple-900/20 to-purple-800/10 border border-purple-700/30 rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-3">
+              <div className="bg-gradient-to-br from-purple-900/20 to-purple-800/10 border border-purple-700/30 rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-4">
                   <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
                   <h4 className="text-lg font-semibold text-purple-300">AI Vision Analysis</h4>
                 </div>
-                <p className="text-stone-300 leading-relaxed text-base whitespace-pre-wrap">
-                  {fallbackConfirmModal.visionDescription}
-                </p>
+                <div className="text-stone-300 leading-loose text-base space-y-3">
+                  {fallbackConfirmModal.visionDescription.split('\n\n').map((paragraph, idx) => {
+                    // Check if paragraph is a bullet point list
+                    if (paragraph.includes('\n- ') || paragraph.startsWith('- ')) {
+                      const items = paragraph.split('\n').filter(line => line.trim());
+                      return (
+                        <ul key={idx} className="list-disc list-inside space-y-2 pl-2">
+                          {items.map((item, itemIdx) => (
+                            <li key={itemIdx} className="text-stone-300">
+                              {item.replace(/^-\s*/, '')}
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    }
+                    // Check if paragraph has numbered list
+                    else if (paragraph.match(/^\d+\./)) {
+                      const items = paragraph.split('\n').filter(line => line.trim());
+                      return (
+                        <ol key={idx} className="list-decimal list-inside space-y-2 pl-2">
+                          {items.map((item, itemIdx) => (
+                            <li key={itemIdx} className="text-stone-300">
+                              {item.replace(/^\d+\.\s*/, '')}
+                            </li>
+                          ))}
+                        </ol>
+                      );
+                    }
+                    // Regular paragraph
+                    return (
+                      <p key={idx} className="text-justify">
+                        {paragraph}
+                      </p>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Buttons */}

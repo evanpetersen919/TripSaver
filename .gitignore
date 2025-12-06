@@ -29,6 +29,10 @@ data/categories_places365.txt
 models/weights/
 data/checkpoints/
 
+# Google Cloud credentials
+google-credentials.json
+*-credentials.json
+
 # MLflow
 mlruns/
 

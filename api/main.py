@@ -48,6 +48,22 @@ from core.auth import (
 # Load environment variables
 load_dotenv()
 
+# ============================================================================
+# GOOGLE CLOUD CREDENTIALS SETUP (for Lambda)
+# ============================================================================
+google_creds_b64 = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+if google_creds_b64 and not google_creds_b64.endswith('.json'):
+    # Decode base64 credentials and save to /tmp
+    try:
+        creds_json = base64.b64decode(google_creds_b64).decode('utf-8')
+        creds_path = '/tmp/google-credentials.json'
+        with open(creds_path, 'w') as f:
+            f.write(creds_json)
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = creds_path
+        print("✅ Google Cloud credentials loaded for Vision API")
+    except Exception as e:
+        print(f"⚠️ Failed to load Google credentials: {e}")
+
 # Initialize FastAPI
 app = FastAPI(
     title="CV Location Classifier API",
@@ -819,11 +835,11 @@ async def fallback_analysis(
                 "messages": [{
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Describe this landmark in detail. Include its name if recognizable, architectural features, location characteristics, and notable details."},
+                        {"type": "text", "text": "Identify this landmark and describe it in 5-8 clear sentences. Include: name, location, historical significance, architectural features, and cultural importance. Write in plain text without formatting."},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64_groq}"}}
                     ]
                 }],
-                "max_completion_tokens": 300,
+                "max_completion_tokens": 150,
                 "temperature": 0.3
             },
             timeout=30
@@ -841,6 +857,93 @@ async def fallback_analysis(
             top_k=10,
             min_similarity=0.3
         )
+        
+        # 3.5. If confidence is low, try Google Vision API (Tier 3)
+        use_vision_api = False
+        if recs and len(recs) > 0:
+            top_confidence = recs[0].get('similarity', 0)
+            if top_confidence < 0.6:  # Low confidence threshold
+                use_vision_api = True
+        else:
+            use_vision_api = True  # No CLIP results
+        
+        if use_vision_api:
+            try:
+                from google.cloud import vision
+                from google.cloud.vision_v1 import types as vision_types
+                
+                # Google Vision API landmark detection
+                client = vision.ImageAnnotatorClient()
+                vision_image = vision_types.Image(content=image_data)
+                
+                response = client.landmark_detection(image=vision_image)
+                landmarks = response.landmark_annotations
+                
+                if landmarks:
+                    # Convert Google Vision results to our format
+                    vision_recs = []
+                    for landmark in landmarks[:5]:
+                        location = landmark.locations[0].lat_lng if landmark.locations else None
+                        vision_recs.append({
+                            'name': landmark.description,
+                            'similarity': landmark.score,
+                            'confidence': landmark.score,
+                            'latitude': location.latitude if location else None,
+                            'longitude': location.longitude if location else None,
+                            'source': 'google_vision_api',
+                            'description': None  # Will be filled by Groq
+                        })
+                    
+                    # Merge with CLIP results (Vision API takes priority)
+                    if vision_recs[0]['similarity'] > 0.7:  # High confidence
+                        recs = vision_recs + recs[:5]  # Vision results first
+                        # Generate a new description specifically for the Vision API landmark
+                        try:
+                            img_byte_arr.seek(0)
+                            img_base64_vision = base64.b64encode(img_byte_arr.read()).decode('utf-8')
+                            
+                            landmark_name = vision_recs[0]['name']
+                            
+                            vision_groq_response = requests.post(
+                                "https://api.groq.com/openai/v1/chat/completions",
+                                headers={
+                                    "Authorization": f"Bearer {groq_api_key}",
+                                    "Content-Type": "application/json"
+                                },
+                                json={
+                                    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                                    "messages": [{
+                                        "role": "user",
+                                        "content": [
+                                            {"type": "text", "text": f"Describe {landmark_name} in 5-8 clear sentences. Include: location, historical background, architectural style, notable features, and why it's significant. Write in plain text without formatting."},
+                                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64_vision}"}}
+                                        ]
+                                    }],
+                                    "max_completion_tokens": 150,
+                                    "temperature": 0.3
+                                },
+                                timeout=30
+                            )
+                            vision_groq_response.raise_for_status()
+                            vision_description = vision_groq_response.json()['choices'][0]['message']['content']
+                            # Add description to the Vision API recommendation
+                            vision_recs[0]['description'] = vision_description
+                        except Exception as groq_error:
+                            print(f"Error getting Vision API description from Groq: {groq_error}")
+                            import traceback
+                            traceback.print_exc()
+                            # Fallback to detailed description mentioning it's from Vision API
+                            vision_description = f"This landmark was identified by Google Vision API as {landmark_name} with {vision_recs[0]['confidence']*100:.1f}% confidence. Detailed AI analysis unavailable at this time."
+                            vision_recs[0]['description'] = vision_description
+                    else:
+                        # Low confidence, set a basic description
+                        vision_recs[0]['description'] = f"Possible landmark: {vision_recs[0]['name']} (low confidence)"
+                
+            except ImportError:
+                print("Google Vision API not available (google-cloud-vision not installed)")
+            except Exception as e:
+                print(f"Google Vision API error: {e}")
+                # Continue with CLIP results
         
         # 4. Update DynamoDB record
         table.update_item(

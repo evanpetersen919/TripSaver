@@ -15,6 +15,9 @@ pydantic[email]>=2.5.0
 requests>=2.31.0
 huggingface_hub>=0.20.0
 
+# Google Vision API (Tier 3 fallback for niche landmarks)
+google-cloud-vision>=3.4.0
+
 # Basic utilities
 pillow>=9.0.0
 numpy<2.0.0

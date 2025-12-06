@@ -21,6 +21,7 @@ Globals:
         GROQ_API_KEY: !Ref GroqAPIKey
         JWT_SECRET: !Ref JWTSecret
         ALLOWED_ORIGINS: !Ref AllowedOrigins
+        GOOGLE_APPLICATION_CREDENTIALS: !Ref GoogleCloudCredentials
     # Layers:
     #   - !Ref PythonDependenciesLayer
     #   - !Ref ModelsLayer
@@ -44,6 +45,12 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Groq API key for FREE fast vision model inference (Llama 4 Scout)
+    
+  GoogleCloudCredentials:
+    Type: String
+    NoEcho: true
+    Description: Base64-encoded Google Cloud service account JSON for Vision API (Tier 3 fallback)
+    Default: ""
     
   JWTSecret:
     Type: String
