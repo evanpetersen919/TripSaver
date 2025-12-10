@@ -264,11 +264,17 @@ export default function Dashboard() {
       const formData = new FormData();
       formData.append('file', files[0]);
       
-      // Call Lambda /predict endpoint
+      // Call Lambda /predict endpoint with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      
       const response = await fetch('https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/predict', {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -312,7 +318,18 @@ export default function Dashboard() {
       
     } catch (error) {
       console.error('Error uploading image:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      
+      let errorMsg = 'Unknown error';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMsg = 'Request timed out after 60 seconds. The Lambda function may be cold starting or the image is too large.';
+        } else if (error.message && error.message.includes('Failed to fetch')) {
+          errorMsg = 'Network error: Could not connect to the API. Check your internet connection and ensure the Lambda function is deployed.';
+        } else {
+          errorMsg = error.message || 'Unknown error occurred';
+        }
+      }
+      
       alert(`Failed to identify landmark:\n${errorMsg}\n\nCheck console for details.`);
       setUploading(false);
     }
