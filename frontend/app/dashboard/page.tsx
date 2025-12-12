@@ -138,7 +138,7 @@ export default function Dashboard() {
   const [loadingPlaceDetails, setLoadingPlaceDetails] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modalLocation, setModalLocation] = useState<Location | null>(null);
-  const [recommendations, setRecommendations] = useState<{ name: string; lat: number; lng: number; confidence: number }[]>([]);
+  const [recommendations, setRecommendations] = useState<{ name: string; lat: number; lng: number; confidence: number; image?: string }[]>([]);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [currentPhotos, setCurrentPhotos] = useState<string[]>([]);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
@@ -706,8 +706,8 @@ export default function Dashboard() {
   };
 
   const handleFindLocations = async (day: number) => {
-    // Check if destination is set
-    if (!destination || !destination.trim()) {
+    // Check if we have either a destination with coordinates OR existing locations to search around
+    if ((!destination || !destination.trim()) && locations.length === 0) {
       // Show minimalist error popup
       const errorDiv = document.createElement('div');
       errorDiv.className = 'fixed top-24 left-1/2 -translate-x-1/2 bg-zinc-900 border border-orange-500/30 rounded-xl px-6 py-4 shadow-2xl z-[10000] animate-fadeIn';
@@ -716,7 +716,7 @@ export default function Dashboard() {
           <svg class="w-5 h-5 text-orange-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          <p class="text-stone-300 text-sm">Please set a destination first</p>
+          <p class="text-stone-300 text-sm">Please set a destination or add locations first</p>
         </div>
       `;
       document.body.appendChild(errorDiv);
@@ -766,12 +766,17 @@ export default function Dashboard() {
           const data = await response.json();
           console.log('Backend response:', data);
           
-          // Transform backend response to match our UI format
-          const transformedRecs = data.recommendations.map((rec: any) => ({
-            name: rec.name,
-            lat: rec.latitude,
-            lng: rec.longitude,
-            confidence: rec.final_score || rec.similarity_score || 0.85
+          // Transform backend response and fetch images
+          const transformedRecs = await Promise.all(data.recommendations.map(async (rec: any) => {
+            const placeData = await fetchPlacePhotos(rec.name);
+            const image = placeData?.photos?.[0]?.url || '';
+            return {
+              name: rec.name,
+              lat: rec.latitude,
+              lng: rec.longitude,
+              confidence: rec.final_score || rec.similarity_score || 0.85,
+              image
+            };
           }));
           
           console.log('Transformed recommendations:', transformedRecs);
@@ -788,7 +793,21 @@ export default function Dashboard() {
       
       // Fallback: Use our API route which calls Google Places API
       console.log('Using Google Places API fallback via /api/recommendations');
-      console.log('Sending to fallback API:', { destinationLat, destinationLng, existingLocations: locations.length });
+      
+      // If we have existing locations, use their average center point
+      // Otherwise use destination coordinates
+      let searchLat = destinationLat;
+      let searchLng = destinationLng;
+      
+      if (locations.length > 0) {
+        searchLat = locations.reduce((sum, loc) => sum + loc.lat, 0) / locations.length;
+        searchLng = locations.reduce((sum, loc) => sum + loc.lng, 0) / locations.length;
+        console.log('Using average center of existing locations:', { searchLat, searchLng });
+      } else {
+        console.log('Using destination coordinates (no locations yet):', { searchLat, searchLng });
+      }
+      
+      console.log('Sending to fallback API:', { searchLat, searchLng, existingLocations: locations.length });
       
       const placesResponse = await fetch('/api/recommendations', {
         method: 'POST',
@@ -796,8 +815,8 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          destinationLat,
-          destinationLng,
+          destinationLat: searchLat,
+          destinationLng: searchLng,
           existingLocations: locations
         })
       });
@@ -807,7 +826,13 @@ export default function Dashboard() {
       if (placesResponse.ok) {
         const placesData = await placesResponse.json();
         console.log('Fallback recommendations:', placesData.recommendations);
-        setRecommendations(placesData.recommendations);
+        // Fetch images for each recommendation
+        const recsWithImages = await Promise.all(placesData.recommendations.map(async (rec: any) => {
+          const placeData = await fetchPlacePhotos(rec.name);
+          const image = placeData?.photos?.[0]?.url || '';
+          return { ...rec, image };
+        }));
+        setRecommendations(recsWithImages);
       } else {
         const errorText = await placesResponse.text();
         console.error('Fallback API error:', placesResponse.status, errorText);
@@ -826,17 +851,24 @@ export default function Dashboard() {
     ));
   };
 
-  const handleAddRecommendationToItinerary = async (name: string, lat: number, lng: number) => {
-    const image = await getLocationImage(name);
+  const handleAddRecommendationToItinerary = async (name: string, lat: number, lng: number, image?: string) => {
+    const placeData = image ? null : await fetchPlacePhotos(name);
+    const locationImage = image || placeData?.photos?.[0]?.url || '';
     const newLocation: Location = {
       id: Date.now().toString(),
       name,
       lat,
       lng,
-      image,
+      image: locationImage,
       day: currentDay,
     };
     setLocations([...locations, newLocation]);
+    // Remove this recommendation from the list so numbers adjust
+    setRecommendations(prev => prev.filter(rec => rec.name !== name));
+  };
+
+  const handleRemoveRecommendation = (name: string) => {
+    setRecommendations(prev => prev.filter(rec => rec.name !== name));
   };
 
   const handleClearRecommendations = () => {
@@ -1171,6 +1203,7 @@ export default function Dashboard() {
             onAddToItinerary={handleAddRecommendationToItinerary}
             recommendations={recommendations}
             onClearRecommendations={handleClearRecommendations}
+            onRemoveRecommendation={handleRemoveRecommendation}
           />
         </div>
 

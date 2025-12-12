@@ -57,14 +57,16 @@ interface Recommendation {
   lat: number;
   lng: number;
   confidence: number;
+  image?: string;
 }
 
 interface MapComponentProps {
   landmarks: Location[];
   selectedLandmark: Location | null;
-  onAddToItinerary?: (name: string, lat: number, lng: number) => void;
+  onAddToItinerary?: (name: string, lat: number, lng: number, image?: string) => void;
   recommendations?: Recommendation[];
   onClearRecommendations?: () => void;
+  onRemoveRecommendation?: (name: string) => void;
 }
 
 // 50 distinct colors for different days
@@ -105,11 +107,11 @@ const NumberedMarker = ({ number, color }: { number: number; color: string }) =>
   </div>
 );
 
-const AIRecommendationMarker = ({ rank, isSelected }: { rank: number; isSelected: boolean }) => (
+const AIRecommendationMarker = ({ rank, isSelected, image, onRemove }: { rank: number; isSelected: boolean; image?: string; onRemove?: () => void }) => (
   <div style={{
     position: 'relative',
-    width: '48px',
-    height: '48px',
+    width: '56px',
+    height: '56px',
     animation: 'bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
     animationDelay: `${rank * 0.1}s`,
     animationFillMode: 'both'
@@ -136,40 +138,132 @@ const AIRecommendationMarker = ({ rank, isSelected }: { rank: number; isSelected
       opacity: 0.6
     }}></div>
     
+    {/* X button */}
+    {onRemove && (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        style={{
+          position: 'absolute',
+          top: '-8px',
+          right: '-8px',
+          width: '22px',
+          height: '22px',
+          borderRadius: '50%',
+          background: 'rgba(24, 24, 27, 0.95)',
+          border: '2px solid #f97316',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: 10,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+          transition: 'all 0.2s ease',
+          backdropFilter: 'blur(8px)'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.15)';
+          e.currentTarget.style.background = '#f97316';
+          e.currentTarget.style.borderColor = '#fb923c';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.background = 'rgba(24, 24, 27, 0.95)';
+          e.currentTarget.style.borderColor = '#f97316';
+        }}
+      >
+        <svg
+          style={{
+            width: '13px',
+            height: '13px',
+            color: '#f97316'
+          }}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    )}
+    
     {/* Main marker */}
     <div style={{
       position: 'relative',
       width: '100%',
       height: '100%',
       borderRadius: '50%',
-      background: isSelected 
-        ? 'linear-gradient(135deg, #f97316, #fb923c)'
-        : 'linear-gradient(135deg, #18181b, #27272a)',
       border: '3px solid',
       borderColor: rank === 1 ? '#f97316' : rank === 2 ? '#fb923c' : '#fbbf24',
       boxShadow: isSelected 
         ? '0 8px 32px rgba(249, 115, 22, 0.6), 0 0 0 2px rgba(249, 115, 22, 0.2)'
         : '0 4px 16px rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
       cursor: 'pointer',
       transform: isSelected ? 'scale(1.15)' : 'scale(1)',
-      transition: 'all 0.3s ease'
+      transition: 'all 0.3s ease',
+      overflow: 'hidden'
     }}>
-      <span style={{
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: '20px',
-        textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-      }}>
-        {rank}
-      </span>
+      {image ? (
+        <>
+          <img 
+            src={image} 
+            alt="Location"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover'
+            }}
+          />
+          {/* Number overlay */}
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '4px'
+          }}>
+            <span style={{
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '16px',
+              textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+            }}>
+              {rank}
+            </span>
+          </div>
+        </>
+      ) : (
+        <div style={{
+          width: '100%',
+          height: '100%',
+          background: isSelected 
+            ? 'linear-gradient(135deg, #f97316, #fb923c)'
+            : 'linear-gradient(135deg, #18181b, #27272a)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <span style={{
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '20px',
+            textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+          }}>
+            {rank}
+          </span>
+        </div>
+      )}
     </div>
   </div>
 );
 
-export default function MapComponent({ landmarks, selectedLandmark, onAddToItinerary, recommendations = [], onClearRecommendations }: MapComponentProps) {
+export default function MapComponent({ landmarks, selectedLandmark, onAddToItinerary, recommendations = [], onClearRecommendations, onRemoveRecommendation }: MapComponentProps) {
   const center = landmarks.length > 0 
     ? { lat: landmarks[0].lat, lng: landmarks[0].lng }
     : { lat: 35.6762, lng: 139.6503 };
@@ -650,7 +744,12 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
               position={{ lat: rec.lat, lng: rec.lng }}
               onClick={() => setSelectedRecommendation(index)}
             >
-              <AIRecommendationMarker rank={index + 1} isSelected={selectedRecommendation === index} />
+              <AIRecommendationMarker 
+                rank={index + 1} 
+                isSelected={selectedRecommendation === index} 
+                image={rec.image}
+                onRemove={onRemoveRecommendation ? () => onRemoveRecommendation(rec.name) : undefined}
+              />
             </AdvancedMarker>
 
             {selectedRecommendation === index && (
@@ -692,6 +791,14 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
                     </svg>
                   </button>
 
+                  {rec.image && (
+                    <img 
+                      src={rec.image} 
+                      alt={rec.name}
+                      className="w-full h-32 object-cover"
+                    />
+                  )}
+
                   <div className="px-4 py-3" style={{
                     background: 'linear-gradient(135deg, #f97316, #fb923c)',
                   }}>
@@ -713,11 +820,9 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
                     <button
                       onClick={() => {
                         if (onAddToItinerary) {
-                          onAddToItinerary(rec.name, rec.lat, rec.lng);
+                          onAddToItinerary(rec.name, rec.lat, rec.lng, rec.image);
                           setSelectedRecommendation(null);
-                          if (onClearRecommendations) {
-                            onClearRecommendations();
-                          }
+                          // Don't clear recommendations - keep them visible
                         }
                       }}
                       className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
