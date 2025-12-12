@@ -149,6 +149,7 @@ export default function Dashboard() {
     predictionId: string;
     predictions: any[];
     imagePreview: string;
+    googleVisionResult?: { landmark_name: string; confidence: number; locations: any[] } | null;
   } | null>(null);
   const [loadingFallback, setLoadingFallback] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -164,30 +165,8 @@ export default function Dashboard() {
     confidence: number;
   } | null>(null);
   
-  // Store current prediction ID for Tier 3
+  // Store current prediction ID for Tier 2 fallback
   const [currentPredictionId, setCurrentPredictionId] = useState<string | null>(null);
-  
-  // Tier 3 (Google Vision API) state
-  const [showTier3Modal, setShowTier3Modal] = useState(false);
-  const [loadingTier3, setLoadingTier3] = useState(false);
-  
-  // Helpful Info Modal (when no landmarks found)
-  const [helpfulInfoModal, setHelpfulInfoModal] = useState<{
-    show: boolean;
-    message: string;
-    labels: string[];
-    text: string | null;
-    suggestion: string;
-  } | null>(null);
-  const [tier3ConfirmModal, setTier3ConfirmModal] = useState<{
-    show: boolean;
-    landmarkName: string;
-    visionDescription: string;
-    image: string;
-    latitude: number;
-    longitude: number;
-    confidence: number;
-  } | null>(null);
   
   // Debounce timers
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -309,6 +288,7 @@ export default function Dashboard() {
           predictionId: result.prediction_id,
           predictions: predictionsWithPhotos,
           imagePreview: imagePreview,
+          googleVisionResult: result.google_vision_result || null,
         });
         setUploading(false);
         setShowUploadModal(false);
@@ -474,126 +454,10 @@ export default function Dashboard() {
     setLocations([...locations, newLocation]);
     setFallbackConfirmModal(null);
   };
-  
-  const handleConfirmTier3Location = () => {
-    if (!tier3ConfirmModal) return;
-    
-    const newLocation: Location = {
-      id: Date.now().toString(),
-      name: tier3ConfirmModal.landmarkName,
-      lat: tier3ConfirmModal.latitude,
-      lng: tier3ConfirmModal.longitude,
-      confidence: tier3ConfirmModal.confidence,
-      day: currentDay,
-      image: tier3ConfirmModal.image || undefined
-    };
-    
-    setLocations([...locations, newLocation]);
-    setTier3ConfirmModal(null);
-    setShowTier3Modal(false);
-  };
-  
-  const handleRejectTier3Location = () => {
-    setTier3ConfirmModal(null);
-    setShowTier3Modal(false);
-    alert('No more analysis options available. Please try uploading a different photo.');
-  };
-
-  const handleRejectFallbackLocation = async () => {
-    if (!fallbackConfirmModal || !currentPredictionId) return;
-    
-    // Close Tier 2 modal and show Tier 3 loading
+  const handleRejectFallbackLocation = () => {
+    // Simply close the Tier 2 modal - no Tier 3 anymore
     setFallbackConfirmModal(null);
-    setLoadingTier3(true);
-    setShowTier3Modal(true);
-    
-    try {
-      const response = await fetch(
-        `https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/predict/vision-api/${encodeURIComponent(currentPredictionId)}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Vision API failed');
-      }
-      
-      const result = await response.json();
-      console.log('Tier 3 Vision API result:', result);
-      
-      // Check if Vision API found no landmarks (helpful message response)
-      if (result.message) {
-        setShowTier3Modal(false);
-        setLoadingTier3(false);
-        
-        // Show RGB helpful info modal
-        setHelpfulInfoModal({
-          show: true,
-          message: result.message,
-          labels: result.detected_info?.labels || [],
-          text: result.detected_info?.text || null,
-          suggestion: result.suggestion || ''
-        });
-        return;
-      }
-      
-      // Process top recommendation
-      if (result.recommendations && result.recommendations.length > 0) {
-        const topRec = result.recommendations[0];
-        
-        // Clean description
-        const descriptionSource = result.vision_description || topRec.description || 'No description available';
-        const cleanDescription = descriptionSource
-          .replace(/\*\*(.*?)\*\*/g, '$1')
-          .replace(/\*(.*?)\*/g, '$1');
-        
-        // Extract landmark name
-        let landmarkName = topRec.name;
-        if (result.vision_description) {
-          const nameMatch = result.vision_description.match(/(?:landmark in the image is|This is|famous|iconic)\s+(?:the\s+)?([^,\.]+(?:Shrine|Temple|Tower|Palace|Castle|Gate|Bridge|Monument|Building|Cathedral|Mosque|Church|Fort|Wall|Statue|Garden|Park|Falls|Mountain|Volcano|Island)[^,\.]*)/i);
-          if (nameMatch) {
-            landmarkName = nameMatch[1].trim();
-          }
-        }
-        
-        // Fetch photos for the landmark
-        const placeData = await fetchPlacePhotos(landmarkName);
-        const latitude = placeData.location?.latitude || topRec.latitude || (destinationLat + Math.random() * 0.1 - 0.05);
-        const longitude = placeData.location?.longitude || topRec.longitude || (destinationLng + Math.random() * 0.1 - 0.05);
-        const imageUrl = placeData.photos && placeData.photos.length > 0 ? placeData.photos[0].url : '';
-        
-        // Show Tier 3 confirmation modal
-        setLoadingTier3(false);
-        setTier3ConfirmModal({
-          show: true,
-          landmarkName: landmarkName,
-          visionDescription: cleanDescription,
-          image: imageUrl,
-          latitude,
-          longitude,
-          confidence: topRec.final_score || topRec.text_similarity || 0.85
-        });
-      } else {
-        setShowTier3Modal(false);
-        setLoadingTier3(false);
-        alert('This location isn\'t in Google\'s landmark database. Try uploading a famous landmark or tourist attraction for best results.');
-      }
-      
-    } catch (error) {
-      console.error('Error in Tier 3 Vision API:', error);
-      const errorMessage = error instanceof Error && error.message && error.message.includes('isn\'t in Google\'s landmark database')
-        ? error.message
-        : 'Vision API analysis failed. This might not be a well-known landmark. Try a different photo.';
-      alert(errorMessage);
-      setShowTier3Modal(false);
-      setLoadingTier3(false);
-    }
+    setShowFallbackModal(false);
   };
 
   const getTotalDays = () => {
@@ -2419,6 +2283,26 @@ export default function Dashboard() {
             </div>
 
             <div className="p-6 space-y-6">
+              {/* Google Vision Validation Badge */}
+              {predictionModal.googleVisionResult && (
+                <div className="bg-gradient-to-r from-blue-900/20 via-green-900/20 to-blue-900/20 border-2 border-blue-500/30 rounded-xl p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-blue-300 text-sm">Google Vision Validation</div>
+                      <p className="text-stone-400 text-xs mt-0.5">
+                        Confirmed: <span className="text-green-400 font-medium">{predictionModal.googleVisionResult.landmark_name}</span>
+                        {' '}({(predictionModal.googleVisionResult.confidence * 100).toFixed(1)}% confidence)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Image Preview */}
               <div className="relative w-full h-80 bg-zinc-800 rounded-xl overflow-hidden">
                 <img
@@ -2799,223 +2683,6 @@ export default function Dashboard() {
                   Yes, Add to Itinerary
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tier 3 Loading Modal (RGB-themed) */}
-      {showTier3Modal && loadingTier3 && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[10002] p-4">
-          <div className="bg-gradient-to-br from-zinc-900 via-black to-zinc-900 border-2 border-red-500/30 rounded-2xl shadow-2xl max-w-md w-full p-8 relative overflow-hidden">
-            {/* Animated RGB Background Glow */}
-            <div className="absolute inset-0 opacity-20">
-              <div className="absolute top-0 left-1/4 w-32 h-32 bg-red-500 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '2s' }}></div>
-              <div className="absolute bottom-0 right-1/4 w-32 h-32 bg-blue-500 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}></div>
-              <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-green-500 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '3s', animationDelay: '1s' }}></div>
-            </div>
-
-            <div className="text-center space-y-6 relative z-10">
-              {/* Advanced RGB Spinner with Multiple Rings */}
-              <div className="relative w-24 h-24 mx-auto">
-                {/* Outer ring - slow */}
-                <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-red-500 border-r-green-500 animate-spin" style={{ animationDuration: '2s' }}></div>
-                {/* Middle ring - medium */}
-                <div className="absolute inset-2 rounded-full border-[3px] border-transparent border-r-blue-500 border-b-red-500 animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }}></div>
-                {/* Inner ring - fast */}
-                <div className="absolute inset-4 rounded-full border-[3px] border-transparent border-t-green-500 border-l-blue-500 animate-spin" style={{ animationDuration: '1s' }}></div>
-                {/* Center pulse */}
-                <div className="absolute inset-8 rounded-full bg-gradient-to-br from-red-500/30 via-green-500/30 to-blue-500/30 animate-pulse"></div>
-              </div>
-
-              {/* Text */}
-              <div>
-                <h3 className="text-2xl font-bold mb-2 bg-gradient-to-r from-red-400 via-green-400 to-blue-400 bg-clip-text text-transparent animate-pulse">
-                  Tier 3: Final Analysis
-                </h3>
-                <p className="text-stone-400 text-sm font-medium">
-                  Consulting Google Vision API...
-                </p>
-                <p className="text-xs text-stone-500 mt-2">
-                  Analyzing with advanced landmark detection
-                </p>
-              </div>
-
-              {/* Animated RGB Progress Bar */}
-              <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-green-500 to-blue-500 animate-pulse" style={{ 
-                  animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite, shimmer 2s linear infinite',
-                  backgroundSize: '200% 100%'
-                }}></div>
-              </div>
-
-              {/* Status indicators */}
-              <div className="flex justify-center gap-2">
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-ping" style={{ animationDelay: '0.3s' }}></span>
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping" style={{ animationDelay: '0.6s' }}></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tier 3 Confirmation Modal (RGB-themed) */}
-      {tier3ConfirmModal && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[10002] p-4">
-          <div className="bg-gradient-to-br from-zinc-900 via-black to-zinc-900 border-2 shadow-2xl max-w-2xl w-full overflow-hidden rounded-2xl" style={{ borderImage: 'linear-gradient(135deg, #ef4444, #22c55e, #3b82f6) 1' }}>
-            {/* Header with RGB gradient */}
-            <div className="bg-gradient-to-r from-red-900/20 via-green-900/20 to-blue-900/20 border-b border-zinc-700/50 px-6 py-4">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-red-400 via-green-400 to-blue-400 bg-clip-text text-transparent">
-                Tier 3 - Google Vision API
-              </h2>
-              <p className="text-stone-400 text-sm mt-1">Final analysis result</p>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Landmark Name */}
-              <div className="text-center">
-                <h3 className="text-3xl font-bold bg-gradient-to-r from-red-400 via-green-400 to-blue-400 bg-clip-text text-transparent">
-                  {tier3ConfirmModal.landmarkName}
-                </h3>
-                {tier3ConfirmModal.confidence && !isNaN(tier3ConfirmModal.confidence) && (
-                  <div className="flex items-center justify-center gap-2 mt-2">
-                    <div className="px-3 py-1 bg-gradient-to-r from-red-500/20 via-green-500/20 to-blue-500/20 border border-red-500/30 rounded-full">
-                      <span className="text-stone-200 text-sm font-medium">
-                        {(tier3ConfirmModal.confidence * 100).toFixed(1)}% Confidence
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Image */}
-              {tier3ConfirmModal.image && (
-                <div className="relative w-full h-80 bg-zinc-800 rounded-xl overflow-hidden border-2" style={{ borderImage: 'linear-gradient(135deg, #ef4444, #22c55e, #3b82f6) 1' }}>
-                  <img
-                    src={tier3ConfirmModal.image}
-                    alt={tier3ConfirmModal.landmarkName}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
-
-              {/* AI Analysis - RGB themed */}
-              <div className="bg-gradient-to-br from-red-900/10 via-green-900/10 to-blue-900/10 border border-red-500/20 rounded-xl p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  <h4 className="text-lg font-semibold bg-gradient-to-r from-red-400 via-green-400 to-blue-400 bg-clip-text text-transparent">
-                    Google Vision + AI Analysis
-                  </h4>
-                </div>
-                <div className="text-stone-300 leading-loose text-base space-y-3">
-                  {tier3ConfirmModal.visionDescription.split('\n\n').map((paragraph, idx) => {
-                    if (paragraph.includes('\n- ') || paragraph.startsWith('- ')) {
-                      const items = paragraph.split('\n').filter(line => line.trim());
-                      return (
-                        <ul key={idx} className="list-disc list-inside space-y-2 pl-2">
-                          {items.map((item, itemIdx) => (
-                            <li key={itemIdx} className="text-stone-300">
-                              {item.replace(/^-\s*/, '')}
-                            </li>
-                          ))}
-                        </ul>
-                      );
-                    }
-                    else if (paragraph.match(/^\d+\./)) {
-                      const items = paragraph.split('\n').filter(line => line.trim());
-                      return (
-                        <ol key={idx} className="list-decimal list-inside space-y-2 pl-2">
-                          {items.map((item, itemIdx) => (
-                            <li key={itemIdx} className="text-stone-300">
-                              {item.replace(/^\d+\.\s*/, '')}
-                            </li>
-                          ))}
-                        </ol>
-                      );
-                    }
-                    return (
-                      <p key={idx} className="text-justify">
-                        {paragraph}
-                      </p>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Warning Notice */}
-              <div className="bg-zinc-800/50 border border-red-500/30 rounded-lg p-4">
-                <p className="text-stone-400 text-sm text-center">
-                  <span className="text-red-400 font-semibold">⚠ Final Analysis</span>
-                  <span className="text-stone-400"> - No further options available if rejected</span>
-                </p>
-              </div>
-
-              {/* Buttons with RGB theme */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleRejectTier3Location}
-                  className="flex-1 bg-zinc-800/50 hover:bg-zinc-800 border-2 border-red-500/50 hover:border-red-500 text-red-300 hover:text-red-200 font-semibold py-4 px-6 rounded-xl transition-all duration-200"
-                >
-                  <span className="text-red-400">✕</span> Not This Either
-                </button>
-                <button
-                  onClick={handleConfirmTier3Location}
-                  className="flex-1 bg-gradient-to-r from-red-900/30 via-green-900/30 to-blue-900/30 hover:from-red-900/50 hover:via-green-900/50 hover:to-blue-900/50 border-2 border-green-500/50 hover:border-green-400 text-green-300 hover:text-green-200 font-semibold py-4 px-6 rounded-xl transition-all duration-200"
-                >
-                  <span className="text-green-400">✓</span> Yes, Add to Itinerary
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Helpful Info Modal - RGB-themed (when no landmarks found) */}
-      {helpfulInfoModal?.show && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[10003] p-4">
-          <div className="bg-gradient-to-br from-zinc-900 via-black to-zinc-900 border-2 shadow-2xl max-w-md w-full rounded-3xl p-8" style={{ borderImage: 'linear-gradient(135deg, #ef4444, #22c55e, #3b82f6) 1' }}>
-            <div className="text-center space-y-6">
-              {/* Icon */}
-              <div className="flex justify-center">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-900/30 via-green-900/30 to-blue-900/30 border-2 border-red-500/30 flex items-center justify-center">
-                  <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Message */}
-              <div>
-                <h3 className="text-xl font-semibold text-stone-200 mb-3">
-                  Google Vision API could not identify this as a landmark
-                </h3>
-                <p className="text-stone-400 text-sm leading-relaxed">{helpfulInfoModal.suggestion}</p>
-              </div>
-
-              {/* Detected Labels */}
-              {helpfulInfoModal.labels.length > 0 && (
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {helpfulInfoModal.labels.slice(0, 8).map((label, idx) => (
-                    <span
-                      key={idx}
-                      className="px-3 py-1.5 bg-gradient-to-r from-red-500/10 via-green-500/10 to-blue-500/10 border border-zinc-600/50 rounded-lg text-sm text-stone-300"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Close Button */}
-              <button
-                onClick={() => setHelpfulInfoModal(null)}
-                className="w-full bg-gradient-to-r from-red-900/30 via-green-900/30 to-blue-900/30 hover:from-red-900/50 hover:via-green-900/50 hover:to-blue-900/50 border-2 border-zinc-700/50 hover:border-zinc-600 text-stone-300 hover:text-stone-200 font-semibold py-3 px-6 rounded-2xl transition-all duration-200"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

@@ -454,6 +454,7 @@ class PredictResponse(BaseModel):
     recommendation_strategy: str
     alternatives: Optional[List[str]] = None
     prediction_id: str  # For fallback endpoint
+    google_vision_result: Optional[Dict[str, Any]] = None  # Google Vision validation when confidence < 0.70
 
 
 class FallbackAnalysisResponse(BaseModel):
@@ -714,6 +715,39 @@ async def predict_landmark(
             strategy = 'scene'
             alternatives = [p['landmark'] for p in predictions[:5]]
         
+        # GOOGLE VISION VALIDATION: If confidence < 70%, call Google Vision API
+        google_vision_result = None
+        if top_confidence < 0.70:
+            try:
+                from google.cloud import vision
+                client = vision.ImageAnnotatorClient()
+                
+                # Convert PIL to bytes
+                img_byte_arr_vision = io.BytesIO()
+                image_pil.save(img_byte_arr_vision, format='JPEG')
+                img_byte_arr_vision.seek(0)
+                
+                vision_image = vision.Image(content=img_byte_arr_vision.read())
+                response = client.landmark_detection(image=vision_image)
+                
+                if response.landmark_annotations:
+                    # Google Vision found a landmark - use it to validate/enhance prediction
+                    top_landmark = response.landmark_annotations[0]
+                    google_vision_result = {
+                        'landmark_name': top_landmark.description,
+                        'confidence': top_landmark.score,
+                        'locations': [
+                            {
+                                'latitude': loc.lat_lng.latitude,
+                                'longitude': loc.lat_lng.longitude
+                            }
+                            for loc in top_landmark.locations
+                        ] if top_landmark.locations else []
+                    }
+            except Exception as e:
+                print(f"Google Vision API call failed: {e}")
+                # Continue without Google Vision validation
+        
         # Save prediction and IMAGE to DynamoDB for potential fallback
         prediction_id = f"{user_id}#{int(datetime.utcnow().timestamp() * 1000)}"
         
@@ -762,178 +796,12 @@ async def predict_landmark(
             confidence_level=confidence_level,
             recommendation_strategy=strategy,
             alternatives=alternatives,
-            prediction_id=prediction_id
+            prediction_id=prediction_id,
+            google_vision_result=google_vision_result
         )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
-
-
-@app.post("/predict/vision-api/{prediction_id}", response_model=FallbackAnalysisResponse)
-async def vision_api_analysis(
-    prediction_id: str,
-    credentials: HTTPAuthorizationCredentials = Depends(security_optional)
-):
-    """Tier 3: Google Vision API + Groq - Final fallback when user rejects Tier 2 results"""
-    user_id = require_auth(credentials.credentials) if credentials else "anonymous"
-    
-    try:
-        # Retrieve prediction from DynamoDB using GSI
-        response = table.query(
-            IndexName='GSI1',
-            KeyConditionExpression='GSI1_PK = :pk',
-            ExpressionAttributeValues={
-                ':pk': f'PREDICTION#{prediction_id}'
-            },
-            Limit=1
-        )
-        
-        if not response.get('Items'):
-            raise HTTPException(status_code=404, detail="Prediction not found")
-        
-        item = response['Items'][0]
-        
-        # Check if Vision API already used
-        if item.get('vision_api_used', False):
-            raise HTTPException(status_code=400, detail="Vision API already used for this prediction")
-        
-        # Decode image
-        img_base64 = item.get('image_base64')
-        if not img_base64:
-            raise HTTPException(status_code=400, detail="Image not found in prediction record")
-        
-        image_data = base64.b64decode(img_base64)
-        image_pil = Image.open(io.BytesIO(image_data)).convert('RGB')
-        
-        # Groq API key
-        groq_api_key = os.getenv('GROQ_API_KEY')
-        if not groq_api_key:
-            raise Exception("GROQ_API_KEY not set in environment")
-        
-        # Google Vision API landmark detection
-        try:
-            from google.cloud import vision
-            from google.cloud.vision_v1 import types as vision_types
-            
-            client = vision.ImageAnnotatorClient()
-            vision_image = vision_types.Image(content=image_data)
-            
-            vision_response = client.landmark_detection(image=vision_image)
-            landmarks = vision_response.landmark_annotations
-            
-            if not landmarks:
-                # No landmarks found - but get other useful info
-                label_response = client.label_detection(image=vision_image)
-                text_response = client.text_detection(image=vision_image)
-                
-                detected_labels = [label.description for label in label_response.label_annotations[:8]]
-                detected_text = text_response.text_annotations[0].description if text_response.text_annotations else None
-                
-                # Build helpful message
-                info_parts = []
-                if detected_labels:
-                    info_parts.append(f"Detected: {', '.join(detected_labels)}")
-                if detected_text:
-                    # Clean and truncate text
-                    clean_text = ' '.join(detected_text.split())[:150]
-                    info_parts.append(f"Text found: {clean_text}...")
-                
-                detected_info = ' | '.join(info_parts) if info_parts else 'No additional information detected'
-                
-                return FallbackAnalysisResponse(
-                    vision_description=f'Google Vision API could not identify this as a landmark. {detected_info}\n\nThis might be a lesser-known location. Try accepting the Tier 2 suggestions (purple results), which use visual similarity to find matching landmarks.',
-                    clip_embedding_dim=512,
-                    recommendations=[],
-                    search_mode='google_vision_api',
-                    message=f'Google Vision API could not identify this as a landmark. {detected_info}',
-                    suggestion='This might be a lesser-known location. Try accepting the Tier 2 suggestions (purple results), which use visual similarity to find matching landmarks.',
-                    detected_info={
-                        'labels': detected_labels,
-                        'text': detected_text
-                    }
-                )
-            
-            # Convert Google Vision results to our format
-            vision_recs = []
-            for landmark in landmarks[:5]:
-                location = landmark.locations[0].lat_lng if landmark.locations else None
-                vision_recs.append({
-                    'name': landmark.description,
-                    'similarity': landmark.score,
-                    'confidence': landmark.score,
-                    'latitude': location.latitude if location else None,
-                    'longitude': location.longitude if location else None,
-                    'source': 'google_vision_api',
-                    'description': None
-                })
-            
-            # Generate Groq description for top Vision API result
-            img_byte_arr = io.BytesIO()
-            image_pil.save(img_byte_arr, format='JPEG')
-            img_byte_arr.seek(0)
-            img_base64_vision = base64.b64encode(img_byte_arr.read()).decode('utf-8')
-            
-            landmark_name = vision_recs[0]['name']
-            
-            vision_groq_response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {groq_api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": f"Describe {landmark_name} in 5-8 clear sentences. Include: location, historical background, architectural style, notable features, and why it's significant. Write in plain text without formatting."},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64_vision}"}}
-                        ]
-                    }],
-                    "max_completion_tokens": 150,
-                    "temperature": 0.3
-                },
-                timeout=30
-            )
-            vision_groq_response.raise_for_status()
-            vision_description = vision_groq_response.json()['choices'][0]['message']['content']
-            vision_recs[0]['description'] = vision_description
-            
-            # Update DynamoDB record using the keys from the retrieved item
-            table.update_item(
-                Key={
-                    'PK': item['PK'],
-                    'SK': item['SK']
-                },
-                UpdateExpression='SET vision_api_used = :used, vision_description = :desc',
-                ExpressionAttributeValues={
-                    ':used': True,
-                    ':desc': vision_description
-                }
-            )
-            
-            return FallbackAnalysisResponse(
-                vision_description=vision_description,
-                clip_embedding_dim=512,
-                recommendations=vision_recs,
-                search_mode='google_vision_api'
-            )
-            
-        except ImportError:
-            raise HTTPException(status_code=503, detail="Google Vision API not available")
-        except Exception as e:
-            print(f"Google Vision API error: {e}")
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=f"Vision API error: {str(e)}")
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error in vision_api_analysis: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/predict/fallback/{prediction_id}", response_model=FallbackAnalysisResponse)
