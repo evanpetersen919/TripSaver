@@ -149,7 +149,7 @@ export default function Dashboard() {
     predictionId: string;
     predictions: any[];
     imagePreview: string;
-    googleVisionResult?: { landmark_name: string; confidence: number; locations: any[] } | null;
+    googleVisionResult?: { landmark_name: string; confidence: number; locations: any[]; photos?: any[]; googleLocation?: any; city?: string; country?: string } | null;
   } | null>(null);
   const [loadingFallback, setLoadingFallback] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -283,12 +283,25 @@ export default function Dashboard() {
           })
         );
         
+        // Fetch photos for Google Vision result if present
+        let googleVisionWithPhotos = result.google_vision_result;
+        if (result.google_vision_result) {
+          const visionPlaceData = await fetchPlacePhotos(result.google_vision_result.landmark_name);
+          googleVisionWithPhotos = {
+            ...result.google_vision_result,
+            photos: visionPlaceData.photos,
+            googleLocation: visionPlaceData.location,
+            city: visionPlaceData.city,
+            country: visionPlaceData.country
+          };
+        }
+        
         setPredictionModal({
           show: true,
           predictionId: result.prediction_id,
           predictions: predictionsWithPhotos,
           imagePreview: imagePreview,
-          googleVisionResult: result.google_vision_result || null,
+          googleVisionResult: googleVisionWithPhotos,
         });
         setUploading(false);
         setShowUploadModal(false);
@@ -2330,7 +2343,7 @@ export default function Dashboard() {
                           <div className="font-semibold text-blue-300 text-sm">✓ Google Vision Validation</div>
                           <p className="text-stone-400 text-xs mt-0.5">
                             Confirmed: <span className="text-green-400 font-medium">{predictionModal.googleVisionResult.landmark_name}</span>
-                            {' '}({(predictionModal.googleVisionResult.confidence * 100).toFixed(1)}% confidence)
+                            {' '}({(predictionModal.googleVisionResult.confidence * 100).toFixed(1)}% confidence) - See top result below
                           </p>
                         </>
                       ) : (
@@ -2358,7 +2371,99 @@ export default function Dashboard() {
               {/* Predictions List */}
               <div className="space-y-4">
                 <h3 className="text-xl font-semibold text-stone-100">Top Predictions:</h3>
-                {predictionModal.predictions.map((pred, idx) => (
+                
+                {/* Google Vision Result - Show First if Available */}
+                {predictionModal.googleVisionResult && (
+                  <button
+                    onClick={async () => {
+                      const result = predictionModal.googleVisionResult!;
+                      const placeData = await fetchPlacePhotos(result.landmark_name);
+                      const lat = result.locations[0]?.latitude || destinationLat;
+                      const lng = result.locations[0]?.longitude || destinationLng;
+                      const imageUrl = placeData.photos && placeData.photos.length > 0 ? placeData.photos[0].url : '';
+                      
+                      const newLocation: Location = {
+                        id: Date.now().toString(),
+                        name: result.landmark_name,
+                        lat,
+                        lng,
+                        image: imageUrl,
+                        confidence: result.confidence,
+                        day: currentDay,
+                      };
+                      
+                      setLocations([...locations, newLocation]);
+                      setPredictionModal(null);
+                    }}
+                    className="w-full bg-zinc-800/50 hover:bg-zinc-800 border-2 border-blue-500/50 hover:border-blue-400 rounded-xl overflow-hidden transition-all duration-200 text-left group"
+                  >
+                    {/* Image Gallery */}
+                    {predictionModal.googleVisionResult.photos && predictionModal.googleVisionResult.photos.length > 0 ? (
+                      <div className="flex overflow-x-auto gap-2 p-3 bg-zinc-900/50">
+                        {predictionModal.googleVisionResult.photos.map((photo: any, imgIdx: number) => (
+                          <img
+                            key={imgIdx}
+                            src={photo.url}
+                            alt={`${predictionModal.googleVisionResult.landmark_name} ${imgIdx + 1}`}
+                            className="h-32 w-48 object-cover rounded flex-shrink-0"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex overflow-x-auto gap-2 p-3 bg-zinc-900/50">
+                        {[1, 2, 3].map((imgIdx) => (
+                          <div
+                            key={imgIdx}
+                            className="h-32 w-48 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded flex-shrink-0 flex items-center justify-center text-stone-600"
+                          >
+                            <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Prediction Info */}
+                    <div className="p-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="text-blue-400 font-bold text-xl">#1</span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-stone-100 font-semibold text-lg group-hover:text-blue-400 transition-colors">
+                                  {predictionModal.googleVisionResult.landmark_name}
+                                </div>
+                                <span className="px-2 py-0.5 bg-blue-500/20 border border-blue-400/30 rounded text-blue-300 text-xs font-semibold">
+                                  GOOGLE VISION
+                                </span>
+                              </div>
+                              {(predictionModal.googleVisionResult.city || predictionModal.googleVisionResult.country) && (
+                                <p className="text-stone-500 text-sm mt-1">
+                                  {predictionModal.googleVisionResult.city}{predictionModal.googleVisionResult.city && predictionModal.googleVisionResult.country ? ', ' : ''}{predictionModal.googleVisionResult.country}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="text-blue-400 font-bold text-lg">
+                              {(predictionModal.googleVisionResult.confidence * 100).toFixed(1)}%
+                            </div>
+                            <div className="text-stone-500 text-xs">confidence</div>
+                          </div>
+                          <svg className="w-5 h-5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                )}
+                
+                {predictionModal.predictions.slice(0, 4).map((pred, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleAcceptPrediction(pred)}
@@ -2396,7 +2501,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
-                            <span className="text-orange-400 font-bold text-xl">#{idx + 1}</span>
+                            <span className="text-orange-400 font-bold text-xl">#{predictionModal.googleVisionResult ? idx + 2 : idx + 1}</span>
                             <div>
                               <div className="text-stone-100 font-semibold text-lg group-hover:text-orange-400 transition-colors">
                                 {pred.landmark}
