@@ -71,10 +71,10 @@ export async function GET(request: NextRequest) {
     
     if (detailsData.addressComponents) {
       for (const component of detailsData.addressComponents) {
-        if (component.types.includes('locality')) {
+        if (component.types && component.types.includes('locality')) {
           city = component.longText;
         }
-        if (component.types.includes('country')) {
+        if (component.types && component.types.includes('country')) {
           country = component.longText;
         }
       }

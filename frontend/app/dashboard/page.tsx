@@ -442,7 +442,7 @@ export default function Dashboard() {
           image: imageUrl,
           latitude,
           longitude,
-          confidence: topRec.confidence || topRec.similarity || 0.85  // Default to 85% if not provided
+          confidence: topRec.final_score || topRec.text_similarity || 0.85
         });
       } else {
         setShowFallbackModal(false);
@@ -577,7 +577,7 @@ export default function Dashboard() {
           image: imageUrl,
           latitude,
           longitude,
-          confidence: topRec.confidence || topRec.similarity || 0.85
+          confidence: topRec.final_score || topRec.text_similarity || 0.85
         });
       } else {
         setShowTier3Modal(false);
@@ -587,7 +587,7 @@ export default function Dashboard() {
       
     } catch (error) {
       console.error('Error in Tier 3 Vision API:', error);
-      const errorMessage = error instanceof Error && error.message.includes('isn\'t in Google\'s landmark database')
+      const errorMessage = error instanceof Error && error.message && error.message.includes('isn\'t in Google\'s landmark database')
         ? error.message
         : 'Vision API analysis failed. This might not be a well-known landmark. Try a different photo.';
       alert(errorMessage);
