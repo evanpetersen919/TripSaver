@@ -81,6 +81,15 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Additional middleware to ensure CORS headers on all responses
+@app.middleware("http")
+async def add_cors_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept"
+    return response
+
 # Security
 security = HTTPBearer()
 security_optional = HTTPBearer(auto_error=False)  # Optional auth for testing
