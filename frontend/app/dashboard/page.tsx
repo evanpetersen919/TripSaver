@@ -693,6 +693,28 @@ export default function Dashboard() {
   };
 
   const handleFindLocations = async (day: number) => {
+    // Check if destination is set
+    if (!destination || !destination.trim()) {
+      // Show minimalist error popup
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'fixed top-24 left-1/2 -translate-x-1/2 bg-zinc-900 border border-orange-500/30 rounded-xl px-6 py-4 shadow-2xl z-[10000] animate-fadeIn';
+      errorDiv.innerHTML = `
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-orange-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p class="text-stone-300 text-sm">Please set a destination first</p>
+        </div>
+      `;
+      document.body.appendChild(errorDiv);
+      setTimeout(() => {
+        errorDiv.style.opacity = '0';
+        errorDiv.style.transition = 'opacity 300ms';
+        setTimeout(() => errorDiv.remove(), 300);
+      }, 3000);
+      return;
+    }
+    
     console.log('🔍 Discover clicked! Day:', day);
     setLoadingRecommendations(true);
     setCurrentDay(day); // Set the day for adding recommendations
@@ -2283,21 +2305,42 @@ export default function Dashboard() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Google Vision Validation Badge */}
-              {predictionModal.googleVisionResult && (
-                <div className="bg-gradient-to-r from-blue-900/20 via-green-900/20 to-blue-900/20 border-2 border-blue-500/30 rounded-xl p-4">
+              {/* Google Vision Status Banner */}
+              {predictionModal.predictions[0]?.confidence < 0.70 && (
+                <div className={`border-2 rounded-xl p-4 ${
+                  predictionModal.googleVisionResult 
+                    ? 'bg-gradient-to-r from-blue-900/20 via-green-900/20 to-blue-900/20 border-blue-500/30' 
+                    : 'bg-gradient-to-r from-yellow-900/20 to-orange-900/20 border-yellow-500/30'
+                }`}>
                   <div className="flex items-center gap-3">
                     <div className="flex-shrink-0">
-                      <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                      {predictionModal.googleVisionResult ? (
+                        <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      )}
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold text-blue-300 text-sm">Google Vision Validation</div>
-                      <p className="text-stone-400 text-xs mt-0.5">
-                        Confirmed: <span className="text-green-400 font-medium">{predictionModal.googleVisionResult.landmark_name}</span>
-                        {' '}({(predictionModal.googleVisionResult.confidence * 100).toFixed(1)}% confidence)
-                      </p>
+                      {predictionModal.googleVisionResult ? (
+                        <>
+                          <div className="font-semibold text-blue-300 text-sm">✓ Google Vision Validation</div>
+                          <p className="text-stone-400 text-xs mt-0.5">
+                            Confirmed: <span className="text-green-400 font-medium">{predictionModal.googleVisionResult.landmark_name}</span>
+                            {' '}({(predictionModal.googleVisionResult.confidence * 100).toFixed(1)}% confidence)
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-semibold text-yellow-300 text-sm">⚠ Low Confidence Detection</div>
+                          <p className="text-stone-400 text-xs mt-0.5">
+                            Google Vision API consulted but found no famous landmarks. Consider using Tier 2 if result seems incorrect.
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
