@@ -136,6 +136,8 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref LocationClassifierTable
         - CloudWatchPutMetricPolicy: {}
+        - S3ReadPolicy:
+            BucketName: cv-classifier-embeddings
       # Enable Lambda Insights for enhanced monitoring (stays in free tier)
       Layers:
         - !Sub "arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:14"

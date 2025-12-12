@@ -203,28 +203,83 @@ def get_recommendation_engine():
                 data = json.load(f)
                 self.landmarks = [lm for lm in data.get('landmarks', []) if 'latitude' in lm]
             
-            # Load pre-computed embeddings
-            embeddings_dir = Path(landmarks_path).parent / 'embeddings'
-            embeddings_path = embeddings_dir / 'landmark_text_embeddings.npy'
-            metadata_path = embeddings_dir / 'landmark_text_metadata.json'
-            
+            # Load pre-computed embeddings from S3 or local cache
             self.use_semantic = False
             self.embeddings = None
             self.landmark_id_to_idx = {}
             
-            if embeddings_path.exists() and metadata_path.exists():
-                try:
-                    self.embeddings = np.load(str(embeddings_path))
-                    with open(metadata_path, 'r') as f:
-                        metadata = json.load(f)
-                        landmark_ids = metadata['landmark_ids']
-                        # Create mapping from landmark_id to embedding index
-                        self.landmark_id_to_idx = {lid: i for i, lid in enumerate(landmark_ids)}
+            # Try loading from S3 first (for Lambda), then fall back to local
+            try:
+                embeddings_data, metadata = self._load_embeddings_from_s3()
+                if embeddings_data is not None and metadata is not None:
+                    self.embeddings = embeddings_data
+                    landmark_ids = metadata['landmark_ids']
+                    self.landmark_id_to_idx = {lid: i for i, lid in enumerate(landmark_ids)}
                     self.use_semantic = True
-                    print(f"Loaded {len(self.embeddings)} pre-computed embeddings")
-                except Exception as e:
-                    print(f"Warning: Could not load embeddings: {e}")
+                    print(f"Loaded {len(self.embeddings)} pre-computed embeddings from S3")
+                else:
+                    raise Exception("S3 load returned None")
+            except Exception as s3_error:
+                print(f"S3 load failed, trying local: {s3_error}")
+                # Fall back to local files
+                embeddings_dir = Path(landmarks_path).parent / 'embeddings'
+                embeddings_path = embeddings_dir / 'landmark_text_embeddings.npy'
+                metadata_path = embeddings_dir / 'landmark_text_metadata.json'
+                
+                if embeddings_path.exists() and metadata_path.exists():
+                    try:
+                        self.embeddings = np.load(str(embeddings_path))
+                        with open(metadata_path, 'r') as f:
+                            metadata = json.load(f)
+                            landmark_ids = metadata['landmark_ids']
+                            self.landmark_id_to_idx = {lid: i for i, lid in enumerate(landmark_ids)}
+                        self.use_semantic = True
+                        print(f"Loaded {len(self.embeddings)} pre-computed embeddings from local")
+                    except Exception as e:
+                        print(f"Warning: Could not load embeddings locally: {e}")
+                        self.use_semantic = False
+                else:
+                    print("Warning: No embeddings found locally or in S3")
                     self.use_semantic = False
+        
+        def _load_embeddings_from_s3(self):
+            """Load embeddings from S3 with /tmp caching for Lambda"""
+            import tempfile
+            
+            s3_bucket = 'cv-classifier-embeddings'
+            embeddings_key = 'embeddings/landmark_text_embeddings.npy'
+            metadata_key = 'embeddings/landmark_text_metadata.json'
+            
+            # Use /tmp for Lambda caching
+            tmp_dir = Path('/tmp/embeddings')
+            tmp_dir.mkdir(exist_ok=True)
+            embeddings_cache = tmp_dir / 'landmark_text_embeddings.npy'
+            metadata_cache = tmp_dir / 'landmark_text_metadata.json'
+            
+            # Check if already cached
+            if embeddings_cache.exists() and metadata_cache.exists():
+                print("Using cached embeddings from /tmp")
+                embeddings_data = np.load(str(embeddings_cache))
+                with open(metadata_cache, 'r') as f:
+                    metadata = json.load(f)
+                return embeddings_data, metadata
+            
+            # Download from S3
+            print(f"Downloading embeddings from S3: s3://{s3_bucket}/{embeddings_key}")
+            s3_client = boto3.client('s3')
+            
+            # Download embeddings
+            s3_client.download_file(s3_bucket, embeddings_key, str(embeddings_cache))
+            # Download metadata
+            s3_client.download_file(s3_bucket, metadata_key, str(metadata_cache))
+            
+            # Load from cache
+            embeddings_data = np.load(str(embeddings_cache))
+            with open(metadata_cache, 'r') as f:
+                metadata = json.load(f)
+            
+            print(f"Successfully downloaded and cached {len(embeddings_data)} embeddings")
+            return embeddings_data, metadata
         
         def haversine_distance(self, lat1, lon1, lat2, lon2):
             R = 6371
@@ -243,7 +298,12 @@ def get_recommendation_engine():
             Compute embedding for query text using HuggingFace Inference Providers.
             Uses the InferenceClient with sentence-transformers model.
             Falls back to keyword matching if API fails.
+            
+            DISABLED: Dimension mismatch (384 vs 512) - using keyword matching only
             """
+            # Disabled due to dimension mismatch - use keyword matching instead
+            return None
+            
             try:
                 hf_token = os.getenv('HUGGINGFACE_API_TOKEN') or os.getenv('HF_TOKEN')
                 if not hf_token:
@@ -336,6 +396,10 @@ def get_recommendation_engine():
             
             for lm in self.landmarks:
                 if lm['name'].lower() in itin_names_lower:
+                    continue
+                
+                # Filter out landmarks with ID-like names (e.g., Q125576803)
+                if lm['name'].startswith('Q') and lm['name'][1:].isdigit():
                     continue
                 
                 dist = self.haversine_distance(center_lat, center_lon, 
@@ -940,7 +1004,7 @@ async def fallback_analysis(
 @app.post("/recommend", response_model=RecommendationResponse)
 async def get_recommendations(
     request: RecommendationRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional)
 ):
     """
     Get landmark recommendations based on itinerary and image features.
@@ -948,8 +1012,16 @@ async def get_recommendations(
     Two modes:
     1. Proximity search: If itinerary provided, find nearby landmarks
     2. Global search: If no itinerary, search entire database by similarity
+    
+    Authentication optional for public recommendations.
     """
-    user_id = require_auth(credentials.credentials)
+    # Optional auth - recommendations work without login
+    user_id = None
+    if credentials:
+        try:
+            user_id = require_auth(credentials.credentials)
+        except:
+            pass  # Continue without auth
     
     try:
         engine = get_recommendation_engine()
