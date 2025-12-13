@@ -2,8 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api';
 
 export default function Login() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,16 +18,8 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // TODO: Implement actual login API call
-      console.log('Login:', { email, password });
-      // Placeholder for API integration
-      // const response = await fetch('/api/login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ email, password })
-      // });
-      
-      setLoading(false);
+      await apiClient.login(email, password);
+      router.push('/dashboard');
     } catch (err) {
       setError('Invalid email or password');
       setLoading(false);

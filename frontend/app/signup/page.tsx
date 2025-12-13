@@ -2,9 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api';
 
 export default function SignUp() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -13,6 +17,11 @@ export default function SignUp() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (username.length < 3) {
+      setError('Username must be at least 3 characters');
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -27,18 +36,10 @@ export default function SignUp() {
     setLoading(true);
 
     try {
-      // TODO: Implement actual signup API call
-      console.log('Sign up:', { email, password });
-      // Placeholder for API integration
-      // const response = await fetch('/api/signup', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ email, password })
-      // });
-      
-      setLoading(false);
+      await apiClient.signup(email, password, username);
+      router.push('/dashboard');
     } catch (err) {
-      setError('Failed to create account. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to create account. Please try again.');
       setLoading(false);
     }
   };
@@ -95,6 +96,20 @@ export default function SignUp() {
               required
               className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-40 rounded-lg text-stone-200 placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-60 transition-colors"
               placeholder="Email address"
+            />
+          </div>
+
+          <div>
+            <input
+              type="text"
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              minLength={3}
+              maxLength={30}
+              className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-40 rounded-lg text-stone-200 placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-60 transition-colors"
+              placeholder="Username"
             />
           </div>
 
