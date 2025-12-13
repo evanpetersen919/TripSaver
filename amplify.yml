@@ -8,8 +8,9 @@ frontend:
     build:
       commands:
         - npm run build
+        - npm run export || echo "Static export not needed for SSR"
   artifacts:
-    baseDirectory: frontend/.next
+    baseDirectory: frontend
     files:
       - '**/*'
   cache:
