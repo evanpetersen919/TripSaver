@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
-export default function PlanTrip() {
+function PlanTripForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tripName, setTripName] = useState("");
@@ -208,5 +208,13 @@ export default function PlanTrip() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function PlanTrip() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-b from-zinc-900 via-stone-900 to-zinc-900 flex items-center justify-center">Loading...</div>}>
+      <PlanTripForm />
+    </Suspense>
   );
 }
