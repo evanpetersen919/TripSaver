@@ -26,14 +26,15 @@ jobs:
       working-directory: ./frontend
       run: npm ci
     
-    - name: Run linter
-      working-directory: ./frontend
-      run: npm run lint
-      continue-on-error: true
-    
     - name: Run tests
       working-directory: ./frontend
       run: npm test
+    
+    # Linter runs after tests - warnings only, doesn't fail build
+    - name: Run linter (warnings only)
+      working-directory: ./frontend
+      run: npm run lint || true
+      continue-on-error: true
     
     - name: Run tests with coverage
       working-directory: ./frontend
