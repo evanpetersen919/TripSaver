@@ -167,6 +167,7 @@ jobs:
         fi
     
     - name: Create Amplify app
+      id: create-amplify-app
       if: steps.check-app.outputs.app_exists == 'false'
       run: |
         APP_NAME="cv-location-classifier-frontend"
@@ -218,9 +219,20 @@ jobs:
         
         echo "✅ Amplify app created successfully"
     
+    - name: Get app ID
+      id: get-app-id
+      run: |
+        if [ "${{ steps.check-app.outputs.app_exists }}" = "true" ]; then
+          APP_ID="${{ steps.check-app.outputs.app_id }}"
+        else
+          APP_ID="${{ steps.create-amplify-app.outputs.app_id }}"
+        fi
+        echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
+        echo "Using App ID: $APP_ID"
+    
     - name: Trigger deployment
       run: |
-        APP_ID="${{ steps.check-app.outputs.app_id }}"
+        APP_ID="${{ steps.get-app-id.outputs.app_id }}"
         
         # Start deployment
         JOB_ID=$(aws amplify start-job \
