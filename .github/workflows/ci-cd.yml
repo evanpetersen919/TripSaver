@@ -132,9 +132,9 @@ jobs:
         echo "✅ Deployment successful!"
         echo "API Endpoint: https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/"
 
-  # Deploy Frontend to AWS S3 + CloudFront
+  # Deploy Frontend to AWS Amplify
   deploy-frontend:
-    name: Deploy Frontend to AWS
+    name: Deploy Frontend to AWS Amplify
     needs: frontend-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -149,71 +149,92 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+    - name: Install Amplify CLI
+      run: npm install -g @aws-amplify/cli
     
-    - name: Install dependencies
-      working-directory: ./frontend
-      run: npm ci
-    
-    - name: Build frontend
-      working-directory: ./frontend
+    - name: Check if Amplify app exists
+      id: check-app
       run: |
-        npm run build
-        # Export static files for S3
-        npx next export || echo "Using .next/standalone build"
-      env:
-        NEXT_PUBLIC_API_URL: https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod
-    
-    - name: Create S3 bucket if not exists
-      run: |
-        BUCKET_NAME="cv-location-classifier-frontend"
+        APP_NAME="cv-location-classifier-frontend"
         
-        # Check if bucket exists
-        if ! aws s3 ls "s3://$BUCKET_NAME" 2>&1 > /dev/null; then
-          echo "Creating S3 bucket..."
-          aws s3 mb "s3://$BUCKET_NAME" --region us-east-1
-          
-          # Enable static website hosting
-          aws s3 website "s3://$BUCKET_NAME" \
-            --index-document index.html \
-            --error-document 404.html
-          
-          # Make bucket public
-          aws s3api put-bucket-policy --bucket "$BUCKET_NAME" --policy '{
-            "Version": "2012-10-17",
-            "Statement": [{
-              "Sid": "PublicReadGetObject",
-              "Effect": "Allow",
-              "Principal": "*",
-              "Action": "s3:GetObject",
-              "Resource": "arn:aws:s3:::'"$BUCKET_NAME"'/*"
-            }]
-          }'
-          
-          echo "Bucket created and configured for static hosting"
-        fi
-    
-    - name: Deploy to S3
-      working-directory: ./frontend
-      run: |
-        BUCKET_NAME="cv-location-classifier-frontend"
+        # Check if app exists
+        APP_ID=$(aws amplify list-apps --region us-east-1 --query "apps[?name=='$APP_NAME'].appId" --output text)
         
-        # Upload build files (try out directory first, then .next)
-        if [ -d "out" ]; then
-          aws s3 sync out/ "s3://$BUCKET_NAME" --delete --cache-control "public, max-age=31536000, immutable"
-        elif [ -d ".next/standalone" ]; then
-          aws s3 sync .next/standalone/ "s3://$BUCKET_NAME" --delete
+        if [ -z "$APP_ID" ]; then
+          echo "app_exists=false" >> $GITHUB_OUTPUT
+          echo "App does not exist, will create"
         else
-          aws s3 sync .next/ "s3://$BUCKET_NAME" --delete
+          echo "app_exists=true" >> $GITHUB_OUTPUT
+          echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
+          echo "App exists with ID: $APP_ID"
         fi
+    
+    - name: Create Amplify app
+      if: steps.check-app.outputs.app_exists == 'false'
+      run: |
+        APP_NAME="cv-location-classifier-frontend"
+        REPO_URL="https://github.com/${{ github.repository }}"
         
-        echo "✅ Frontend deployed to S3"
-        echo "🌐 URL: http://$BUCKET_NAME.s3-website-us-east-1.amazonaws.com"
-    #   with:
-    #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
-    #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-    #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-    #     working-directory: ./frontend
+        # Create app
+        APP_ID=$(aws amplify create-app \
+          --name "$APP_NAME" \
+          --repository "$REPO_URL" \
+          --platform WEB_COMPUTE \
+          --environment-variables \
+            NEXT_PUBLIC_API_URL=https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod \
+          --build-spec '{
+            "version": 1,
+            "frontend": {
+              "phases": {
+                "preBuild": {
+                  "commands": ["cd frontend", "npm ci"]
+                },
+                "build": {
+                  "commands": ["npm run build"]
+                }
+              },
+              "artifacts": {
+                "baseDirectory": ".next",
+                "files": ["**/*"]
+              },
+              "cache": {
+                "paths": ["node_modules/**/*"]
+              }
+            }
+          }' \
+          --region us-east-1 \
+          --query 'app.appId' \
+          --output text)
+        
+        echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
+        echo "Created Amplify app with ID: $APP_ID"
+        
+        # Create main branch
+        aws amplify create-branch \
+          --app-id "$APP_ID" \
+          --branch-name main \
+          --region us-east-1
+        
+        # Enable auto-deploy
+        aws amplify update-branch \
+          --app-id "$APP_ID" \
+          --branch-name main \
+          --enable-auto-build \
+          --region us-east-1
+    
+    - name: Trigger deployment
+      run: |
+        APP_ID="${{ steps.check-app.outputs.app_id }}"
+        
+        # Start deployment
+        JOB_ID=$(aws amplify start-job \
+          --app-id "$APP_ID" \
+          --branch-name main \
+          --job-type RELEASE \
+          --region us-east-1 \
+          --query 'jobSummary.jobId' \
+          --output text)
+        
+        echo "Started deployment job: $JOB_ID"
+        echo "✅ Frontend deployment triggered"
+        echo "🌐 Check status: https://console.aws.amazon.com/amplify/home?region=us-east-1#/$APP_ID"
