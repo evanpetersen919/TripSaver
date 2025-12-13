@@ -172,33 +172,37 @@ jobs:
         APP_NAME="cv-location-classifier-frontend"
         REPO_URL="https://github.com/${{ github.repository }}"
         
+        # Create buildspec file
+        cat > amplify-buildspec.json << 'EOF'
+        {
+          "version": 1,
+          "frontend": {
+            "phases": {
+              "preBuild": {
+                "commands": ["cd frontend", "npm ci"]
+              },
+              "build": {
+                "commands": ["npm run build"]
+              }
+            },
+            "artifacts": {
+              "baseDirectory": "frontend/.next",
+              "files": ["**/*"]
+            },
+            "cache": {
+              "paths": ["frontend/node_modules/**/*"]
+            }
+          }
+        }
+        EOF
+        
         # Create app
         APP_ID=$(aws amplify create-app \
           --name "$APP_NAME" \
           --repository "$REPO_URL" \
           --platform WEB_COMPUTE \
-          --environment-variables \
-            NEXT_PUBLIC_API_URL=https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod \
-          --build-spec '{
-            "version": 1,
-            "frontend": {
-              "phases": {
-                "preBuild": {
-                  "commands": ["cd frontend", "npm ci"]
-                },
-                "build": {
-                  "commands": ["npm run build"]
-                }
-              },
-              "artifacts": {
-                "baseDirectory": ".next",
-                "files": ["**/*"]
-              },
-              "cache": {
-                "paths": ["node_modules/**/*"]
-              }
-            }
-          }' \
+          --environment-variables NEXT_PUBLIC_API_URL=https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod \
+          --build-spec file://amplify-buildspec.json \
           --region us-east-1 \
           --query 'app.appId' \
           --output text)
@@ -212,12 +216,7 @@ jobs:
           --branch-name main \
           --region us-east-1
         
-        # Enable auto-deploy
-        aws amplify update-branch \
-          --app-id "$APP_ID" \
-          --branch-name main \
-          --enable-auto-build \
-          --region us-east-1
+        echo "✅ Amplify app created successfully"
     
     - name: Trigger deployment
       run: |
