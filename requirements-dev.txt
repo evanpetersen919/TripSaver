@@ -4,3 +4,4 @@ pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
 httpx>=0.24.0  # For testing FastAPI
 moto>=4.2.0  # For mocking AWS services
+python-multipart>=0.0.6  # Required by FastAPI for form data
