@@ -181,6 +181,13 @@ Resources:
             Path: /auth/login
             Method: POST
         
+        GoogleAuth:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /auth/google
+            Method: POST
+        
         PasswordResetRequest:
           Type: Api
           Properties:

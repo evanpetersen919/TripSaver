@@ -659,8 +659,8 @@ async def google_auth_endpoint(request: dict):
         if response['Items']:
             # User exists, return token
             user = response['Items'][0]
-            from core.auth import generate_access_token
-            token = generate_access_token(user['user_id'])
+            from core.auth import create_access_token
+            token = create_access_token(user['user_id'], email)
             return {
                 "access_token": token,
                 "token_type": "bearer",
