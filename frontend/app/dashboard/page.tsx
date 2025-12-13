@@ -2472,11 +2472,11 @@ export default function Dashboard() {
                     {/* Image Gallery */}
                     {predictionModal.googleVisionResult.photos && predictionModal.googleVisionResult.photos.length > 0 ? (
                       <div className="flex overflow-x-auto gap-2 p-3 bg-zinc-900/50">
-                        {predictionModal.googleVisionResult.photos.map((photo: any, imgIdx: number) => (
+                        {predictionModal.googleVisionResult?.photos.map((photo: any, imgIdx: number) => (
                           <img
                             key={imgIdx}
                             src={photo.url}
-                            alt={`${predictionModal.googleVisionResult.landmark_name} ${imgIdx + 1}`}
+                            alt={`${predictionModal.googleVisionResult?.landmark_name} ${imgIdx + 1}`}
                             className="h-32 w-48 object-cover rounded flex-shrink-0"
                           />
                         ))}
