@@ -132,36 +132,25 @@ jobs:
         echo "✅ Deployment successful!"
         echo "API Endpoint: https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/"
 
-  # Frontend Deployment Info (AWS Amplify)
+  # Frontend Deployment Status (AWS Amplify)
   deploy-frontend:
-    name: Frontend Deployment Info
+    name: Frontend Deployment Status
     needs: frontend-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
-    - name: Setup Instructions
+    - name: Deployment Status
       run: |
         echo "✅ Frontend tests passed!"
+        echo "🚀 Amplify auto-deployment triggered via GitHub webhook"
         echo ""
-        echo "📋 ONE-TIME SETUP (2 minutes):"
-        echo "1. Visit: https://console.aws.amazon.com/amplify/home?region=us-east-1"
-        echo "2. Click 'New app' → 'Host web app'"
-        echo "3. Connect GitHub → Select 'evanpetersen919/CV-Location-Classifier'"
-        echo "4. Branch: main"
-        echo "5. Build settings → Edit:"
-        echo "   baseDirectory: frontend"
-        echo "   buildCommand: npm run build"
-        echo "   outputDirectory: .next"
-        echo "6. Advanced → Add environment variable:"
-        echo "   NEXT_PUBLIC_API_URL = https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod"
-        echo "7. Save and Deploy!"
+        echo "📊 Monitor: https://console.aws.amazon.com/amplify/home?region=us-east-1#/d2t8i1dsvglhtv"
+        echo "🌐 Live URL: https://main.d2t8i1dsvglhtv.amplifyapp.com"
         echo ""
-        echo "✨ After setup, Amplify auto-deploys on every push!"
-        echo ""
-        echo "🏗️ Complete AWS Infrastructure:"
-        echo "  • Lambda (Backend API) ✅ Auto-deployed"
+        echo "🏗️ Complete AWS Infrastructure (All Auto-Deployed):"
+        echo "  • Lambda (Backend API) ✅"
         echo "  • API Gateway ✅"
-        echo "  • Amplify (Frontend) - Setup once, then auto-deploys"
+        echo "  • Amplify (Frontend) ✅"
         echo "  • S3 (Data Storage) ✅"
         echo "  • DynamoDB ✅"
