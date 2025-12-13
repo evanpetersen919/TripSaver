@@ -149,16 +149,13 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
     
-    - name: Install Amplify CLI
-      run: npm install -g @aws-amplify/cli
-    
     - name: Check if Amplify app exists
       id: check-app
       run: |
         APP_NAME="cv-location-classifier-frontend"
         
         # Check if app exists
-        APP_ID=$(aws amplify list-apps --region us-east-1 --query "apps[?name=='$APP_NAME'].appId" --output text)
+        APP_ID=$(aws amplify list-apps --region us-east-1 --query "apps[?name=='$APP_NAME'].appId" --output text 2>/dev/null || echo "")
         
         if [ -z "$APP_ID" ]; then
           echo "app_exists=false" >> $GITHUB_OUTPUT

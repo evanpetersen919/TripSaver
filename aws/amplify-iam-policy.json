@@ -1,0 +1,25 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AmplifyFullAccess",
+      "Effect": "Allow",
+      "Action": [
+        "amplify:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AmplifyServiceRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:AttachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:PassRole",
+        "iam:GetRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/amplifyconsole-*"
+    }
+  ]
+}
