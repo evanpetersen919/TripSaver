@@ -89,15 +89,15 @@ export async function GET(request: NextRequest) {
     // Redirect to plan page with token in URL (frontend will store it)
     const redirectUrl = new URL('/plan', request.url);
     redirectUrl.searchParams.append('token', authResult.access_token);
-    redirectUrl.sea[OAuth] Google OAuth error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(errorMessage
+    redirectUrl.searchParams.append('username', authResult.username || 'user');
+    
+    return NextResponse.redirect(redirectUrl.toString());
 
   } catch (error) {
-    console.error('Google OAuth error:', error);
+    console.error('[OAuth] Google OAuth error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
     return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent('Authentication failed')}`, request.url)
+      new URL(`/login?error=${encodeURIComponent(errorMessage)}`, request.url)
     );
   }
 }
