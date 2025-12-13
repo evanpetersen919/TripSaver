@@ -132,117 +132,28 @@ jobs:
         echo "✅ Deployment successful!"
         echo "API Endpoint: https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/"
 
-  # Deploy Frontend to AWS Amplify
+  # Deploy Frontend - Manual Amplify Setup Required
   deploy-frontend:
-    name: Deploy Frontend to AWS Amplify
+    name: Frontend Deployment Status
     needs: frontend-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
-    
-    - name: Check if Amplify app exists
-      id: check-app
+    - name: Deployment instructions
       run: |
-        APP_NAME="cv-location-classifier-frontend"
-        
-        # Check if app exists
-        APP_ID=$(aws amplify list-apps --region us-east-1 --query "apps[?name=='$APP_NAME'].appId" --output text 2>/dev/null || echo "")
-        
-        if [ -z "$APP_ID" ]; then
-          echo "app_exists=false" >> $GITHUB_OUTPUT
-          echo "App does not exist, will create"
-        else
-          echo "app_exists=true" >> $GITHUB_OUTPUT
-          echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
-          echo "App exists with ID: $APP_ID"
-        fi
-    
-    - name: Create Amplify app
-      id: create-amplify-app
-      if: steps.check-app.outputs.app_exists == 'false'
-      run: |
-        APP_NAME="cv-location-classifier-frontend"
-        REPO_URL="https://github.com/${{ github.repository }}"
-        
-        # Create buildspec file
-        cat > amplify-buildspec.json << 'EOF'
-        {
-          "version": 1,
-          "frontend": {
-            "phases": {
-              "preBuild": {
-                "commands": ["cd frontend", "npm ci"]
-              },
-              "build": {
-                "commands": ["npm run build"]
-              }
-            },
-            "artifacts": {
-              "baseDirectory": "frontend/.next",
-              "files": ["**/*"]
-            },
-            "cache": {
-              "paths": ["frontend/node_modules/**/*"]
-            }
-          }
-        }
-        EOF
-        
-        # Create app
-        APP_ID=$(aws amplify create-app \
-          --name "$APP_NAME" \
-          --repository "$REPO_URL" \
-          --platform WEB_COMPUTE \
-          --environment-variables NEXT_PUBLIC_API_URL=https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod \
-          --build-spec file://amplify-buildspec.json \
-          --region us-east-1 \
-          --query 'app.appId' \
-          --output text)
-        
-        echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
-        echo "Created Amplify app with ID: $APP_ID"
-        
-        # Create main branch
-        aws amplify create-branch \
-          --app-id "$APP_ID" \
-          --branch-name main \
-          --region us-east-1
-        
-        echo "✅ Amplify app created successfully"
-    
-    - name: Get app ID
-      id: get-app-id
-      run: |
-        if [ "${{ steps.check-app.outputs.app_exists }}" = "true" ]; then
-          APP_ID="${{ steps.check-app.outputs.app_id }}"
-        else
-          APP_ID="${{ steps.create-amplify-app.outputs.app_id }}"
-        fi
-        echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
-        echo "Using App ID: $APP_ID"
-    
-    - name: Trigger deployment
-      run: |
-        APP_ID="${{ steps.get-app-id.outputs.app_id }}"
-        
-        # Start deployment
-        JOB_ID=$(aws amplify start-job \
-          --app-id "$APP_ID" \
-          --branch-name main \
-          --job-type RELEASE \
-          --region us-east-1 \
-          --query 'jobSummary.jobId' \
-          --output text)
-        
-        echo "Started deployment job: $JOB_ID"
-        echo "✅ Frontend deployment triggered"
-        echo "🌐 Check status: https://console.aws.amazon.com/amplify/home?region=us-east-1#/$APP_ID"
+        echo "✅ Frontend tests passed!"
+        echo ""
+        echo "📋 TO COMPLETE DEPLOYMENT:"
+        echo "1. Go to: https://console.aws.amazon.com/amplify"
+        echo "2. Click 'New app' → 'Host web app'"
+        echo "3. Select 'GitHub' and authorize"
+        echo "4. Choose repo: evanpetersen919/CV-Location-Classifier"
+        echo "5. Branch: main"
+        echo "6. Build settings:"
+        echo "   - Build command: cd frontend && npm run build"
+        echo "   - Output directory: frontend/.next"
+        echo "7. Add environment variable: NEXT_PUBLIC_API_URL=https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod"
+        echo "8. Click 'Save and deploy'"
+        echo ""
+        echo "After setup, Amplify will auto-deploy on every push to main!"
