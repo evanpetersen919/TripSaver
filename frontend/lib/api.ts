@@ -93,20 +93,26 @@ class APIClient {
     return this.request('/health');
   }
 
-  async signup(email: string, password: string, fullName: string) {
-    return this.request('/auth/signup', {
+  async signup(email: string, password: string, username: string) {
+    const response = await this.request('/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ email, password, full_name: fullName }),
-    }) as Promise<AuthResponse>;
+      body: JSON.stringify({ email, password, username }),
+    });
+    
+    if (response.access_token) {
+      this.setToken(response.access_token);
+    }
+    
+    return response;
   }
 
   async login(email: string, password: string) {
     const response = await this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
-    }) as AuthResponse;
+    });
 
-    if (response.success && response.access_token) {
+    if (response.access_token) {
       this.setToken(response.access_token);
     }
 
