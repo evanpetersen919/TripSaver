@@ -168,7 +168,7 @@ export default function Dashboard() {
   } | null>(null);
   const [loadingFallback, setLoadingFallback] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadModalDay, setUploadModalDay] = useState<number>(1);
+  const [, setUploadModalDay] = useState<number>(1);
   const [showFallbackModal, setShowFallbackModal] = useState(false);
   const [fallbackConfirmModal, setFallbackConfirmModal] = useState<{
     show: boolean;
@@ -181,7 +181,7 @@ export default function Dashboard() {
   } | null>(null);
   
   // Store current prediction ID for Tier 2 fallback
-  const [currentPredictionId, setCurrentPredictionId] = useState<string | null>(null);
+  const [, setCurrentPredictionId] = useState<string | null>(null);
   
   // Debounce timers
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -653,6 +653,8 @@ export default function Dashboard() {
     }
   };
 
+  // Function for adding locations from map click (currently unused but kept for future use)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleAddFromMap = async (placeName: string, lat: number, lng: number) => {
     // Get image using place details which has better photo quality
     const imageUrl = await getLocationImage(placeName, lat, lng);
