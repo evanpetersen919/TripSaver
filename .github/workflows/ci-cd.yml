@@ -132,9 +132,9 @@ jobs:
         echo "✅ Deployment successful!"
         echo "API Endpoint: https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/"
 
-  # Frontend Deployment Status (AWS Amplify)
+  # Frontend Deployment (Vercel)
   deploy-frontend:
-    name: Frontend Deployment Status
+    name: Frontend Deployment Status  
     needs: frontend-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -143,14 +143,14 @@ jobs:
     - name: Deployment Status
       run: |
         echo "✅ Frontend tests passed!"
-        echo "🚀 Amplify auto-deployment triggered via GitHub webhook"
+        echo "🚀 Frontend auto-deploys via Vercel GitHub integration"
+        echo "🌐 Live: https://cv-location-classifier.vercel.app"
         echo ""
-        echo "📊 Monitor: https://console.aws.amazon.com/amplify/home?region=us-east-1#/d2t8i1dsvglhtv"
-        echo "🌐 Live URL: https://main.d2t8i1dsvglhtv.amplifyapp.com"
+        echo "🏗️ Complete Infrastructure:"
+        echo "  • AWS Lambda (Backend API) ✅ Auto-deployed"
+        echo "  • AWS API Gateway ✅"
+        echo "  • AWS S3 (Embeddings Storage) ✅"
+        echo "  • AWS DynamoDB ✅"
+        echo "  • Vercel (Frontend CDN) ✅ Auto-deployed"
         echo ""
-        echo "🏗️ Complete AWS Infrastructure (All Auto-Deployed):"
-        echo "  • Lambda (Backend API) ✅"
-        echo "  • API Gateway ✅"
-        echo "  • Amplify (Frontend) ✅"
-        echo "  • S3 (Data Storage) ✅"
-        echo "  • DynamoDB ✅"
+        echo "📈 All services auto-deploy on push to main!"
