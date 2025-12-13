@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
 export default function PlanTrip() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tripName, setTripName] = useState("");
   const [destination, setDestination] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -15,6 +16,16 @@ export default function PlanTrip() {
   const [selectedLat, setSelectedLat] = useState("35.6762");
   const [selectedLng, setSelectedLng] = useState("139.6503");
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Handle OAuth callback token
+  useEffect(() => {
+    const token = searchParams.get('token');
+    if (token) {
+      localStorage.setItem('token', token);
+      // Clean URL
+      window.history.replaceState({}, '', '/plan');
+    }
+  }, [searchParams]);
 
   // Pre-cache popular destinations on page load
   useEffect(() => {

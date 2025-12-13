@@ -634,6 +634,70 @@ async def login_endpoint(request: LoginRequest):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+@app.post("/auth/google")
+async def google_auth_endpoint(request: dict):
+    """
+    Authenticate or create user via Google OAuth.
+    """
+    try:
+        email = request.get('email')
+        google_id = request.get('google_id')
+        name = request.get('name', '')
+        picture = request.get('picture', '')
+        
+        if not email or not google_id:
+            raise ValueError("Email and Google ID required")
+        
+        # Try to login first
+        from core.auth import table
+        response = table.query(
+            IndexName='GSI1',
+            KeyConditionExpression='GSI1_PK = :email',
+            ExpressionAttributeValues={':email': f'USER#EMAIL#{email}'}
+        )
+        
+        if response['Items']:
+            # User exists, return token
+            user = response['Items'][0]
+            from core.auth import generate_access_token
+            token = generate_access_token(user['user_id'])
+            return {
+                "access_token": token,
+                "token_type": "bearer",
+                "user_id": user['user_id'],
+                "username": user.get('username', name.split()[0] if name else 'user')
+            }
+        else:
+            # Create new user
+            username = name.split()[0].lower() if name else email.split('@')[0]
+            # Ensure unique username
+            import uuid
+            username = f"{username}_{str(uuid.uuid4())[:6]}"
+            
+            result = signup(
+                email=email,
+                username=username,
+                password=google_id  # Use Google ID as password (they'll never use it)
+            )
+            
+            if not result.get('success'):
+                raise ValueError(result.get('error', 'Signup failed'))
+            
+            user = result['user']
+            return {
+                "access_token": result['token'],
+                "token_type": "bearer",
+                "user_id": user['user_id'],
+                "username": user['username']
+            }
+            
+    except Exception as e:
+        print(f"ERROR: Google auth failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/auth/password-reset/request")
 async def request_password_reset_endpoint(request: PasswordResetRequest):
     """

@@ -27,8 +27,7 @@ export default function Login() {
   };
 
   const handleGoogleSignIn = () => {
-    // TODO: Implement Google OAuth
-    console.log('Google sign in clicked');
+    window.location.href = '/api/auth/google?action=login';
   };
 
   return (
