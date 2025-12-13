@@ -132,58 +132,36 @@ jobs:
         echo "✅ Deployment successful!"
         echo "API Endpoint: https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/"
 
-  # Deploy Frontend to AWS Amplify
+  # Frontend Deployment Info (AWS Amplify)
   deploy-frontend:
-    name: Deploy Frontend to AWS Amplify
+    name: Frontend Deployment Info
     needs: frontend-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-    
-    - name: Install dependencies
-      working-directory: ./frontend
-      run: npm ci
-    
-    - name: Build frontend
-      working-directory: ./frontend
-      run: npm run build
-      env:
-        NEXT_PUBLIC_API_URL: https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod
-    
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
-    
-    - name: Create deployment package
-      working-directory: ./frontend
+    - name: Setup Instructions
       run: |
-        zip -r ../frontend-deploy.zip .next package.json public node_modules next.config.ts
-    
-    - name: Deploy to Amplify
-      run: |
-        APP_ID="d3ijiliwvv9v5k"
-        
-        # Start deployment
-        aws amplify start-deployment \
-          --app-id "$APP_ID" \
-          --branch-name main \
-          --region us-east-1 \
-          --source-url "file://frontend-deploy.zip" || \
-        aws amplify start-job \
-          --app-id "$APP_ID" \
-          --branch-name main \
-          --job-type RELEASE \
-          --region us-east-1
-        
-        echo "✅ Frontend deployed to Amplify"
-        echo "🌐 URL: https://main.d3ijiliwvv9v5k.amplifyapp.com"
+        echo "✅ Frontend tests passed!"
+        echo ""
+        echo "📋 ONE-TIME SETUP (2 minutes):"
+        echo "1. Visit: https://console.aws.amazon.com/amplify/home?region=us-east-1"
+        echo "2. Click 'New app' → 'Host web app'"
+        echo "3. Connect GitHub → Select 'evanpetersen919/CV-Location-Classifier'"
+        echo "4. Branch: main"
+        echo "5. Build settings → Edit:"
+        echo "   baseDirectory: frontend"
+        echo "   buildCommand: npm run build"
+        echo "   outputDirectory: .next"
+        echo "6. Advanced → Add environment variable:"
+        echo "   NEXT_PUBLIC_API_URL = https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod"
+        echo "7. Save and Deploy!"
+        echo ""
+        echo "✨ After setup, Amplify auto-deploys on every push!"
+        echo ""
+        echo "🏗️ Complete AWS Infrastructure:"
+        echo "  • Lambda (Backend API) ✅ Auto-deployed"
+        echo "  • API Gateway ✅"
+        echo "  • Amplify (Frontend) - Setup once, then auto-deploys"
+        echo "  • S3 (Data Storage) ✅"
+        echo "  • DynamoDB ✅"
