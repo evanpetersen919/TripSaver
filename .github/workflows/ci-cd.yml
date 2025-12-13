@@ -87,7 +87,6 @@ jobs:
     needs: [frontend-test, backend-test]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    continue-on-error: true
     
     steps:
     - uses: actions/checkout@v3
@@ -108,22 +107,30 @@ jobs:
         aws-region: us-east-1
     
     - name: SAM Build
-      run: sam build --cached
+      run: sam build
     
     - name: SAM Deploy
+      env:
+        HUGGINGFACE_API_TOKEN: ${{ secrets.HUGGINGFACE_API_TOKEN }}
+        JWT_SECRET: ${{ secrets.JWT_SECRET }}
       run: |
         sam deploy \
+          --stack-name cv-location-classifier \
+          --region us-east-1 \
+          --resolve-s3 \
+          --capabilities CAPABILITY_IAM \
           --no-confirm-changeset \
           --no-fail-on-empty-changeset \
           --parameter-overrides \
-            HuggingFaceAPIToken=${{ secrets.HUGGINGFACE_API_TOKEN }} \
-            JWTSecret=${{ secrets.JWT_SECRET }} \
-            AllowedOrigins="*" || echo "Deployment attempted - check AWS Console for details"
-      continue-on-error: true
+            "HuggingFaceAPIToken=${HUGGINGFACE_API_TOKEN}" \
+            "JWTSecret=${JWT_SECRET}" \
+            "AllowedOrigins=*"
     
-    - name: Deployment Summary
-      if: always()
-      run: echo "✅ Tests passed and deployment attempted. Check AWS Lambda console for deployment status."
+    - name: Deployment Success
+      if: success()
+      run: |
+        echo "✅ Deployment successful!"
+        echo "API Endpoint: https://eh5scbzco7.execute-api.us-east-1.amazonaws.com/prod/"
 
   # Deploy Frontend to Vercel (optional - disabled for now)
   deploy-frontend:
