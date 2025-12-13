@@ -33,20 +33,46 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-900 via-stone-900 to-zinc-900 flex items-center justify-center px-8 py-32">
+      <style jsx>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-10px); }
+          75% { transform: translateX(10px); }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.5s ease-out;
+        }
+      `}</style>
       <div 
         className="w-full max-w-md bg-zinc-900 bg-opacity-70 backdrop-blur-md rounded-3xl p-12 border border-stone-700 border-opacity-30"
         style={{ 
           backdropFilter: 'blur(20px) saturate(180%)', 
           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          backgroundColor: 'rgba(24, 24, 27, 0.7)'
+          backgroundColor: 'rgba(24, 24, 27, 0.7)',
+          animation: 'fadeInUp 0.6s ease-out'
         } as React.CSSProperties}
       >
-        <h1 className="text-4xl font-semibold text-stone-100 mb-2 text-center">Welcome Back</h1>
-        <p className="text-stone-400 text-center mb-8">Sign in to your TripSaver account</p>
+        <h1 className="text-4xl font-semibold text-stone-100 mb-2 text-center animate-fade-in" style={{ animationDelay: '0.1s', animationFillMode: 'backwards' } as React.CSSProperties}>Welcome Back</h1>
+        <p className="text-stone-400 text-center mb-8 animate-fade-in" style={{ animationDelay: '0.2s', animationFillMode: 'backwards' } as React.CSSProperties}>Sign in to your TripSaver account</p>
 
         <button
           onClick={handleGoogleSignIn}
-          className="w-full bg-white text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-100 transition-all border border-gray-300 font-bold flex items-center justify-center gap-3 mb-6"
+          className="w-full bg-white text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-100 hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] transition-all duration-200 border border-gray-300 font-bold flex items-center justify-center gap-3 mb-6 animate-fade-in"
+          style={{ animationDelay: '0.3s', animationFillMode: 'backwards' } as React.CSSProperties}
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -63,7 +89,9 @@ export default function Login() {
         </div>
 
         {error && (
-          <div className="bg-red-500 bg-opacity-10 border border-red-500 border-opacity-30 text-red-400 px-4 py-3 rounded-lg mb-6">
+          <div className="bg-red-500 bg-opacity-10 border border-red-500 border-opacity-30 text-red-400 px-4 py-3 rounded-lg mb-6 animate-shake"
+            style={{ animation: 'shake 0.4s ease-in-out, fadeIn 0.3s ease-out' } as React.CSSProperties}
+          >
             {error}
           </div>
         )}
@@ -76,7 +104,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-40 rounded-lg text-stone-200 placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-60 transition-colors"
+              className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-40 rounded-lg text-stone-200 placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-60 focus:ring-2 focus:ring-orange-400 focus:ring-opacity-20 focus:scale-[1.01] transition-all duration-200"
               placeholder="Email address"
             />
           </div>
@@ -88,7 +116,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-40 rounded-lg text-stone-200 placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-60 transition-colors"
+              className="w-full px-4 py-3 bg-zinc-800 bg-opacity-50 border border-stone-700 border-opacity-40 rounded-lg text-stone-200 placeholder-stone-500 focus:outline-none focus:border-orange-400 focus:border-opacity-60 focus:ring-2 focus:ring-orange-400 focus:ring-opacity-20 focus:scale-[1.01] transition-all duration-200"
               placeholder="Password"
             />
           </div>
@@ -96,9 +124,17 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-orange-500 bg-opacity-20 text-white px-6 py-3 rounded-lg hover:bg-opacity-30 transition-all border border-orange-500 border-opacity-30 font-normal disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-orange-500 bg-opacity-20 text-white px-6 py-3 rounded-lg hover:bg-opacity-30 hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] transition-all duration-200 border border-orange-500 border-opacity-30 font-normal disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Signing in...
+              </span>
+            ) : 'Sign In'}
           </button>
         </form>
 
