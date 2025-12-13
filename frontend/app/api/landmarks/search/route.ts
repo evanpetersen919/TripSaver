@@ -219,7 +219,7 @@ export async function GET(request: Request) {
       const nameWords = nameLower.split(' ');
       if (queryWords.length > 1) {
         // Multi-word query: bonus if all words present
-        const allWordsMatch = queryWords.every(qw => nameWords.some(nw => nw.startsWith(qw) || nw.includes(qw)));
+        const allWordsMatch = queryWords.every((qw: string) => nameWords.some((nw: string) => nw.startsWith(qw) || nw.includes(qw)));
         if (allWordsMatch) score += 300;
       }
       
