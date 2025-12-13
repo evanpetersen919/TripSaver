@@ -19,7 +19,7 @@ export default function Login() {
 
     try {
       await apiClient.login(email, password);
-      router.push('/dashboard');
+      router.push('/plan');
     } catch (err) {
       setError('Invalid email or password');
       setLoading(false);
