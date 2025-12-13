@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    console.log('[OAuth] Starting token exchange with code:', code?.substring(0, 10) + '...');
+    console.log('[OAuth] Redirect URI:', REDIRECT_URI);
+    
     // Exchange code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -41,10 +44,13 @@ export async function GET(request: NextRequest) {
     });
 
     if (!tokenResponse.ok) {
-      throw new Error('Failed to exchange code for token');
+      const errorData = await tokenResponse.json();
+      console.error('[OAuth] Token exchange failed:', errorData);
+      throw new Error(`Failed to exchange code for token: ${JSON.stringify(errorData)}`);
     }
 
     const tokens = await tokenResponse.json();
+    console.log('[OAuth] Token exchange successful');
 
     // Get user info from Google
     const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -56,8 +62,10 @@ export async function GET(request: NextRequest) {
     }
 
     const userInfo = await userInfoResponse.json();
+    console.log('[OAuth] Got user info:', userInfo.email);
 
     // Call backend Google auth endpoint
+    console.log('[OAuth] Calling backend:', `${API_BASE_URL}/auth/google`);
     const backendResponse = await fetch(`${API_BASE_URL}/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -70,17 +78,21 @@ export async function GET(request: NextRequest) {
     });
 
     if (!backendResponse.ok) {
-      throw new Error('Backend authentication failed');
+      const errorText = await backendResponse.text();
+      console.error('[OAuth] Backend auth failed:', errorText);
+      throw new Error(`Backend authentication failed: ${errorText}`);
     }
 
     const authResult = await backendResponse.json();
+    console.log('[OAuth] Backend auth successful, redirecting to /plan');
 
     // Redirect to plan page with token in URL (frontend will store it)
     const redirectUrl = new URL('/plan', request.url);
     redirectUrl.searchParams.append('token', authResult.access_token);
-    redirectUrl.searchParams.append('username', authResult.username || userInfo.name);
-    
-    return NextResponse.redirect(redirectUrl.toString());
+    redirectUrl.sea[OAuth] Google OAuth error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+    return NextResponse.redirect(
+      new URL(`/login?error=${encodeURIComponent(errorMessage
 
   } catch (error) {
     console.error('Google OAuth error:', error);
