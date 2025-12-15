@@ -14,6 +14,7 @@ interface Trip {
   locationCount: number;
   createdAt: string;
   updatedAt: string;
+  imageUrl?: string;
 }
 
 interface PopularDestination {
@@ -49,6 +50,26 @@ function OverviewContent() {
     { name: "Germany", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&h=600&fit=crop" },
     { name: "Iceland", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&h=600&fit=crop" },
   ]);
+
+  // Get image for destination (different from country cards)
+  const getDestinationImage = (destination: string): string => {
+    const imageMap: { [key: string]: string } = {
+      'Japan': 'https://images.unsplash.com/photo-1480796927426-f609979314bd?w=800&h=500&fit=crop',
+      'France': 'https://images.unsplash.com/photo-1431274172761-fca41d930114?w=800&h=500&fit=crop',
+      'Italy': 'https://images.unsplash.com/photo-1498307833015-e7b400441eb8?w=800&h=500&fit=crop',
+      'USA': 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&h=500&fit=crop',
+      'Spain': 'https://images.unsplash.com/photo-1558642084-fd07fae5282e?w=800&h=500&fit=crop',
+      'Greece': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800&h=500&fit=crop',
+      'Thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&h=500&fit=crop',
+      'Australia': 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=800&h=500&fit=crop',
+      'United Kingdom': 'https://images.unsplash.com/photo-1486299267070-83823f5448dd?w=800&h=500&fit=crop',
+      'Canada': 'https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&h=500&fit=crop',
+      'Germany': 'https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=800&h=500&fit=crop',
+      'Iceland': 'https://images.unsplash.com/photo-1531168556467-80aace0d0144?w=800&h=500&fit=crop',
+    };
+    // Return specific image or generic travel image
+    return imageMap[destination] || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&h=500&fit=crop';
+  };
 
   // Filter and sort trips
   const filteredTrips = trips
@@ -371,6 +392,17 @@ function OverviewContent() {
                 key={trip.id}
                 className="bg-zinc-900/50 backdrop-blur-sm rounded-xl border border-stone-800 hover:border-orange-400/50 transition-all duration-300 overflow-hidden group"
               >
+                {/* Trip Image */}
+                <div className="relative h-48 overflow-hidden">
+                  <Image
+                    src={trip.imageUrl || getDestinationImage(trip.destination)}
+                    alt={trip.destination}
+                    fill
+                    className="object-cover group-hover:scale-110 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/40 to-transparent"></div>
+                </div>
+                
                 {/* Trip Header */}
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-2">
