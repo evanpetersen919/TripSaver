@@ -49,6 +49,7 @@ class APIClient {
     this.token = token;
     if (typeof window !== 'undefined') {
       localStorage.setItem('token', token);
+      localStorage.setItem('last_login_time', Date.now().toString());
     }
   }
 
@@ -56,6 +57,8 @@ class APIClient {
     this.token = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
+      localStorage.removeItem('last_login_time');
+      localStorage.removeItem('user');
     }
   }
 

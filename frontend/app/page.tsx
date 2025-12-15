@@ -2,14 +2,35 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [archRotation, setArchRotation] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(0);
   const [currentRotation, setCurrentRotation] = useState(0);
+
+  // No automatic redirect - let users view homepage even when logged in
+
+  const handleGetStarted = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    const lastLoginTime = localStorage.getItem('last_login_time');
+    
+    if (token && lastLoginTime) {
+      const hourInMs = 60 * 60 * 1000;
+      const timeSinceLogin = Date.now() - parseInt(lastLoginTime);
+      
+      if (timeSinceLogin < hourInMs) {
+        router.push('/overview');
+        return;
+      }
+    }
+    router.push('/login');
+  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -50,12 +71,12 @@ export default function Home() {
               <a href="#features" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); const el = document.getElementById('features'); if (el) { const y = el.getBoundingClientRect().top + window.pageYOffset - 100; window.scrollTo({ top: y, behavior: 'smooth' }); } }}>Features</a>
               <a href="#how-it-works" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); }}>Technology</a>
               <a href="#about" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' }); }}>About</a>
-              <Link 
-                href="/login" 
-                className="px-6 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold"
+              <button 
+                onClick={handleGetStarted}
+                className="px-6 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold cursor-pointer"
               >
                 Get Started
-              </Link>
+              </button>
             </div>
 
             {/* Mobile Menu Button */}
@@ -79,12 +100,12 @@ export default function Home() {
               <a href="#features" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); const el = document.getElementById('features'); if (el) { const y = el.getBoundingClientRect().top + window.pageYOffset - 100; window.scrollTo({ top: y, behavior: 'smooth' }); } setMobileMenuOpen(false); }}>Features</a>
               <a href="#how-it-works" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }}>Technology</a>
               <a href="#about" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }}>About</a>
-              <Link 
-                href="/login" 
-                className="block text-center px-6 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg font-semibold"
+              <button 
+                onClick={(e) => { handleGetStarted(e); setMobileMenuOpen(false); }}
+                className="block w-full text-center px-6 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg font-semibold cursor-pointer"
               >
                 Get Started
-              </Link>
+              </button>
             </div>
           )}
         </nav>
@@ -114,9 +135,9 @@ export default function Home() {
           <p className="text-xl text-stone-200 max-w-2xl mx-auto mb-10 font-light leading-relaxed">
             Transform your travel photos into landmark discoveries with AI-powered visual recognition and intelligent location recommendations
           </p>
-          <Link
-            href="/login"
-            className="group relative inline-block overflow-hidden border-2 border-orange-500 text-orange-400 hover:text-white px-12 py-5 rounded-2xl text-lg font-semibold hover:scale-105 hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] transition-all duration-300 mb-16"
+          <button
+            onClick={handleGetStarted}
+            className="group relative inline-block overflow-hidden border-2 border-orange-500 text-orange-400 hover:text-white px-12 py-5 rounded-2xl text-lg font-semibold hover:scale-105 hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] transition-all duration-300 mb-16 cursor-pointer"
           >
             <span className="relative z-10 flex items-center gap-2">
               Start Planning Now
@@ -125,7 +146,7 @@ export default function Home() {
               </svg>
             </span>
             <div className="absolute inset-0 bg-gradient-to-r from-orange-500 via-red-600 to-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          </Link>
+          </button>
           
           {/* Demo Video Placeholder */}
           <div className="relative rounded-2xl shadow-2xl aspect-video max-w-5xl mx-auto overflow-hidden border border-stone-700 border-opacity-50 bg-black bg-opacity-30 backdrop-blur-sm hover:scale-105 hover:shadow-[0_0_50px_rgba(249,115,22,0.4)] transition-all duration-500 group cursor-pointer">

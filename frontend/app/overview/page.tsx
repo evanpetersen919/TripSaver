@@ -88,6 +88,7 @@ export default function Overview() {
     
     if (urlToken) {
       localStorage.setItem('token', urlToken);
+      localStorage.setItem('last_login_time', Date.now().toString());
       if (urlUsername) {
         localStorage.setItem('user', JSON.stringify({ name: urlUsername }));
       }
