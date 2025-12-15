@@ -28,7 +28,7 @@ function LoginForm() {
 
     try {
       await apiClient.login(email, password);
-      router.push('/plan');
+      router.push('/overview');
     } catch (err) {
       setError('Invalid email or password');
       setLoading(false);

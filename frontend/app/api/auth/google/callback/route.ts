@@ -84,10 +84,10 @@ export async function GET(request: NextRequest) {
     }
 
     const authResult = await backendResponse.json();
-    console.log('[OAuth] Backend auth successful, redirecting to /plan');
+    console.log('[OAuth] Backend auth successful, redirecting to /overview');
 
-    // Redirect to plan page with token in URL (frontend will store it)
-    const redirectUrl = new URL('/plan', request.url);
+    // Redirect to overview page with token in URL (frontend will store it)
+    const redirectUrl = new URL('/overview', request.url);
     redirectUrl.searchParams.append('token', authResult.access_token);
     redirectUrl.searchParams.append('username', authResult.username || 'user');
     

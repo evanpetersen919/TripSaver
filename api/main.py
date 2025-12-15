@@ -559,6 +559,22 @@ class FeedbackRequest(BaseModel):
     user_comment: Optional[str] = None
 
 
+class TripCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    destination: str = Field(..., min_length=1, max_length=200)
+    startDate: str  # ISO date string
+    endDate: str  # ISO date string
+    locations: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class TripUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    destination: Optional[str] = Field(None, min_length=1, max_length=200)
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+    locations: Optional[List[Dict[str, Any]]] = None
+
+
 # ============================================================================
 # AUTHENTICATION ENDPOINTS
 # ============================================================================
@@ -1268,6 +1284,229 @@ async def submit_feedback(
         })
         
         return {"message": "Feedback submitted", "feedback_id": feedback_id}
+        
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail="Database error")
+
+
+# ============================================================================
+# TRIP MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.post("/api/trips", status_code=status.HTTP_201_CREATED)
+async def create_trip(
+    request: TripCreateRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Create a new trip for the authenticated user.
+    """
+    user_id = require_auth(credentials.credentials)
+    
+    try:
+        trip_id = f"{user_id}#{int(datetime.utcnow().timestamp() * 1000)}"
+        now = datetime.utcnow().isoformat()
+        
+        table.put_item(Item={
+            'PK': f'USER#{user_id}',
+            'SK': f'TRIP#{trip_id}',
+            'trip_id': trip_id,
+            'name': request.name,
+            'destination': request.destination,
+            'startDate': request.startDate,
+            'endDate': request.endDate,
+            'locations': request.locations,
+            'locationCount': len(request.locations),
+            'createdAt': now,
+            'updatedAt': now,
+            'GSI1_PK': f'TRIP#{trip_id}',
+            'GSI1_SK': 'METADATA'
+        })
+        
+        return {
+            "message": "Trip created successfully",
+            "trip": {
+                "id": trip_id,
+                "name": request.name,
+                "destination": request.destination,
+                "startDate": request.startDate,
+                "endDate": request.endDate,
+                "locationCount": len(request.locations),
+                "createdAt": now,
+                "updatedAt": now
+            }
+        }
+        
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail="Database error")
+
+
+@app.get("/api/trips")
+async def get_trips(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Get all trips for the authenticated user.
+    """
+    user_id = require_auth(credentials.credentials)
+    
+    try:
+        response = table.query(
+            KeyConditionExpression='PK = :pk AND begins_with(SK, :sk)',
+            ExpressionAttributeValues={
+                ':pk': f'USER#{user_id}',
+                ':sk': 'TRIP#'
+            }
+        )
+        
+        trips = response.get('Items', [])
+        
+        # Format trips for frontend
+        formatted_trips = []
+        for trip in trips:
+            formatted_trips.append({
+                'id': trip.get('trip_id', ''),
+                'name': trip.get('name', ''),
+                'destination': trip.get('destination', ''),
+                'startDate': trip.get('startDate', ''),
+                'endDate': trip.get('endDate', ''),
+                'locationCount': trip.get('locationCount', 0),
+                'createdAt': trip.get('createdAt', ''),
+                'updatedAt': trip.get('updatedAt', '')
+            })
+        
+        # Sort by updatedAt descending
+        formatted_trips.sort(key=lambda x: x['updatedAt'], reverse=True)
+        
+        return {"trips": formatted_trips, "count": len(formatted_trips)}
+        
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail="Database error")
+
+
+@app.get("/api/trips/{trip_id}")
+async def get_trip(
+    trip_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Get a specific trip by ID.
+    """
+    user_id = require_auth(credentials.credentials)
+    
+    try:
+        response = table.get_item(
+            Key={
+                'PK': f'USER#{user_id}',
+                'SK': f'TRIP#{trip_id}'
+            }
+        )
+        
+        trip = response.get('Item')
+        if not trip:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        
+        return {
+            'id': trip.get('trip_id', ''),
+            'name': trip.get('name', ''),
+            'destination': trip.get('destination', ''),
+            'startDate': trip.get('startDate', ''),
+            'endDate': trip.get('endDate', ''),
+            'locations': trip.get('locations', []),
+            'locationCount': trip.get('locationCount', 0),
+            'createdAt': trip.get('createdAt', ''),
+            'updatedAt': trip.get('updatedAt', '')
+        }
+        
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail="Database error")
+
+
+@app.put("/api/trips/{trip_id}")
+async def update_trip(
+    trip_id: str,
+    request: TripUpdateRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Update an existing trip.
+    """
+    user_id = require_auth(credentials.credentials)
+    
+    try:
+        # Get existing trip first
+        response = table.get_item(
+            Key={
+                'PK': f'USER#{user_id}',
+                'SK': f'TRIP#{trip_id}'
+            }
+        )
+        
+        trip = response.get('Item')
+        if not trip:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        
+        # Update fields
+        update_expression = "SET updatedAt = :updated"
+        expression_values = {':updated': datetime.utcnow().isoformat()}
+        
+        if request.name is not None:
+            update_expression += ", #n = :name"
+            expression_values[':name'] = request.name
+        
+        if request.destination is not None:
+            update_expression += ", destination = :dest"
+            expression_values[':dest'] = request.destination
+        
+        if request.startDate is not None:
+            update_expression += ", startDate = :start"
+            expression_values[':start'] = request.startDate
+        
+        if request.endDate is not None:
+            update_expression += ", endDate = :end"
+            expression_values[':end'] = request.endDate
+        
+        if request.locations is not None:
+            update_expression += ", locations = :locs, locationCount = :count"
+            expression_values[':locs'] = request.locations
+            expression_values[':count'] = len(request.locations)
+        
+        # Perform update
+        table.update_item(
+            Key={
+                'PK': f'USER#{user_id}',
+                'SK': f'TRIP#{trip_id}'
+            },
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+            ExpressionAttributeNames={'#n': 'name'}  # 'name' is a reserved word
+        )
+        
+        return {"message": "Trip updated successfully"}
+        
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail="Database error")
+
+
+@app.delete("/api/trips/{trip_id}")
+async def delete_trip(
+    trip_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Delete a trip.
+    """
+    user_id = require_auth(credentials.credentials)
+    
+    try:
+        table.delete_item(
+            Key={
+                'PK': f'USER#{user_id}',
+                'SK': f'TRIP#{trip_id}'
+            }
+        )
+        
+        return {"message": "Trip deleted successfully"}
         
     except ClientError as e:
         raise HTTPException(status_code=500, detail="Database error")

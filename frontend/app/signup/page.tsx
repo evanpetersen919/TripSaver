@@ -37,7 +37,7 @@ export default function SignUp() {
 
     try {
       await apiClient.signup(email, password, username);
-      router.push('/plan');
+      router.push('/overview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create account. Please try again.');
       setLoading(false);
