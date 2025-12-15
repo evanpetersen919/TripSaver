@@ -47,9 +47,9 @@ export default function Home() {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8">
-              <a href="#features" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium">Features</a>
-              <a href="#how-it-works" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium">How It Works</a>
-              <a href="#about" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium">About</a>
+              <a href="#features" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); const el = document.getElementById('features'); if (el) { const y = el.getBoundingClientRect().top + window.pageYOffset - 100; window.scrollTo({ top: y, behavior: 'smooth' }); } }}>Features</a>
+              <a href="#how-it-works" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); }}>Technology</a>
+              <a href="#about" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' }); }}>About</a>
               <Link 
                 href="/login" 
                 className="px-6 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold"
@@ -76,9 +76,9 @@ export default function Home() {
           {/* Mobile Menu */}
           {mobileMenuOpen && (
             <div className="md:hidden mt-4 pb-4 space-y-3 border-t border-stone-800 pt-4">
-              <a href="#features" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium">Features</a>
-              <a href="#how-it-works" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium">How It Works</a>
-              <a href="#about" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium">About</a>
+              <a href="#features" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); const el = document.getElementById('features'); if (el) { const y = el.getBoundingClientRect().top + window.pageYOffset - 100; window.scrollTo({ top: y, behavior: 'smooth' }); } setMobileMenuOpen(false); }}>Features</a>
+              <a href="#how-it-works" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }}>Technology</a>
+              <a href="#about" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }}>About</a>
               <Link 
                 href="/login" 
                 className="block text-center px-6 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg font-semibold"
@@ -217,8 +217,9 @@ export default function Home() {
             <div className="min-w-0">
             <h2 className="text-5xl font-semibold text-stone-100 mb-6 tracking-tight group-hover:text-orange-400 transition-colors duration-300">Training</h2>
             <p className="text-stone-200 text-lg leading-relaxed mb-8 font-normal">
-              EfficientNet-B3 was trained on RTX 4080 using Google Landmarks Dataset v2, starting with ImageNet pretrained weights and fine-tuning on 500 landmark classes. Training employed standard augmentations including RandAugment, MixUp, and CutMix, plus custom social media augmentation to improve robustness on screenshot inputs.
+              EfficientNet-B3 was trained locally on custom hardware (i9-13900K, RTX 4080, 64GB DDR5, Intel 1TB NVMe) using Google Landmarks Dataset v2, taking approximately 20 hours to complete. Training leveraged transfer learning starting with ImageNet pretrained weights and fine-tuning on 500 landmark classes, employing standard augmentations including RandAugment, MixUp, and CutMix, plus custom social media augmentation to improve robustness on screenshot inputs.
             </p>
+
             <ul className="space-y-5">
               <li className="flex items-start">
                 <span className="text-orange-400 mr-4 mt-1 text-xl">•</span>
@@ -233,6 +234,189 @@ export default function Home() {
                 <span className="text-stone-200 text-lg font-normal leading-relaxed">Dataset filtered from 200K+ landmarks to 500 classes with sufficient training samples and global geographic diversity for practical travel applications</span>
               </li>
             </ul>
+
+            {/* Advanced Training Pipeline */}
+            <div className="mt-10">
+              <div className="flex items-center justify-center mb-8">
+                <div className="text-stone-400 text-sm font-medium uppercase tracking-wider">Training Pipeline Architecture</div>
+              </div>
+              
+              {/* Row 1: Hardware Foundation */}
+              <div className="mb-6">
+                <div className="text-center mb-4">
+                  <span className="text-orange-400 text-xs font-semibold uppercase tracking-wide">Hardware Foundation</span>
+                </div>
+                <div className="flex flex-wrap justify-center gap-4">
+                  {/* CPU */}
+                  <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-xl p-5 border border-orange-400/40 shadow-lg w-56">
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <Image src="https://www.vectorlogo.zone/logos/intel/intel-icon.svg" alt="Intel" width={32} height={32}/>
+                      <div className="text-left">
+                        <p className="text-stone-200 text-sm font-bold">i9-13900K</p>
+                        <p className="text-stone-400 text-xs">24 Cores / 32 Threads</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GPU */}
+                  <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-xl p-5 border border-green-400/40 shadow-lg w-56">
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <Image src="https://www.vectorlogo.zone/logos/nvidia/nvidia-icon.svg" alt="NVIDIA" width={32} height={32}/>
+                      <div className="text-left">
+                        <p className="text-stone-200 text-sm font-bold">RTX 4080</p>
+                        <p className="text-stone-400 text-xs">16GB VRAM / 9728 CUDA</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* RAM */}
+                  <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-xl p-5 border border-blue-400/40 shadow-lg w-56">
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none">
+                        <path d="M4 4h16v16H4V4zm2 2v12h12V6H6z" fill="#3B82F6"/>
+                        <rect x="8" y="8" width="2" height="8" fill="#3B82F6"/>
+                        <rect x="11" y="8" width="2" height="8" fill="#3B82F6"/>
+                        <rect x="14" y="8" width="2" height="8" fill="#3B82F6"/>
+                      </svg>
+                      <div className="text-left">
+                        <p className="text-stone-200 text-sm font-bold">64GB DDR5</p>
+                        <p className="text-stone-400 text-xs">System Memory</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Storage */}
+                  <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-xl p-5 border border-purple-400/40 shadow-lg w-56">
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none">
+                        <rect x="3" y="4" width="18" height="4" rx="1" fill="#A855F7"/>
+                        <rect x="3" y="10" width="18" height="4" rx="1" fill="#A855F7" opacity="0.7"/>
+                        <rect x="3" y="16" width="18" height="4" rx="1" fill="#A855F7" opacity="0.5"/>
+                        <circle cx="6" cy="6" r="0.8" fill="#FFF"/>
+                        <circle cx="6" cy="12" r="0.8" fill="#FFF"/>
+                        <circle cx="6" cy="18" r="0.8" fill="#FFF"/>
+                      </svg>
+                      <div className="text-left">
+                        <p className="text-stone-200 text-sm font-bold">Intel 1TB NVMe</p>
+                        <p className="text-stone-400 text-xs">PCIe Gen 3 / 3500 MB/s</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Arrow Down */}
+              <div className="flex justify-center mb-6">
+                <svg className="w-6 h-10 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </div>
+
+              {/* Row 2: Software Stack */}
+              <div className="mb-6">
+                <div className="text-center mb-4">
+                  <span className="text-orange-400 text-xs font-semibold uppercase tracking-wide">Software Stack</span>
+                </div>
+                <div className="flex flex-wrap justify-center gap-4">
+                  {/* Python */}
+                  <div className="bg-zinc-800 rounded-xl p-4 border border-orange-400/30 w-44">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Image src="https://www.vectorlogo.zone/logos/python/python-icon.svg" alt="Python" width={28} height={28}/>
+                      <span className="text-stone-200 text-sm font-semibold">Python 3.10</span>
+                    </div>
+                    <p className="text-stone-500 text-xs text-center">Runtime</p>
+                  </div>
+
+                  {/* PyTorch */}
+                  <div className="bg-zinc-800 rounded-xl p-4 border border-orange-400/30 w-44">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Image src="https://www.vectorlogo.zone/logos/pytorch/pytorch-icon.svg" alt="PyTorch" width={28} height={28}/>
+                      <span className="text-stone-200 text-sm font-semibold">PyTorch 2.0</span>
+                    </div>
+                    <p className="text-stone-500 text-xs text-center">Deep Learning</p>
+                  </div>
+
+                  {/* CUDA */}
+                  <div className="bg-zinc-800 rounded-xl p-4 border border-green-400/30 w-44">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Image src="https://www.vectorlogo.zone/logos/nvidia/nvidia-icon.svg" alt="CUDA" width={28} height={28}/>
+                      <span className="text-stone-200 text-sm font-semibold">CUDA 11.8</span>
+                    </div>
+                    <p className="text-stone-500 text-xs text-center">GPU Acceleration</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Arrow Down */}
+              <div className="flex justify-center mb-6">
+                <svg className="w-6 h-10 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </div>
+
+              {/* Row 3: Training Pipeline */}
+              <div className="mb-6">
+                <div className="text-center mb-4">
+                  <span className="text-orange-400 text-xs font-semibold uppercase tracking-wide">Training Flow</span>
+                </div>
+                <div className="flex flex-col md:flex-row items-center justify-center gap-4">
+                  {/* Dataset */}
+                  <div className="bg-zinc-800 rounded-xl p-4 border border-blue-400/40 w-48">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#3B82F6" strokeWidth="2" fill="none"/>
+                      </svg>
+                      <span className="text-stone-200 text-sm font-semibold">Dataset</span>
+                    </div>
+                    <p className="text-stone-400 text-xs text-center">Google Landmarks v2<br/>500 Classes</p>
+                  </div>
+
+                  <svg className="w-8 h-8 text-orange-400 hidden md:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+
+                  {/* Augmentation */}
+                  <div className="bg-zinc-800 rounded-xl p-4 border border-purple-400/40 w-48">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#A855F7" strokeWidth="2" fill="none"/>
+                      </svg>
+                      <span className="text-stone-200 text-sm font-semibold">Augmentation</span>
+                    </div>
+                    <p className="text-stone-400 text-xs text-center">RandAugment<br/>MixUp + CutMix + Social</p>
+                  </div>
+
+                  <svg className="w-8 h-8 text-orange-400 hidden md:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+
+                  {/* Model Training */}
+                  <div className="bg-zinc-800 rounded-xl p-4 border border-orange-400/40 w-48">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="3" fill="#F59E0B"/>
+                        <path d="M12 1v6m0 6v6M23 12h-6m-6 0H1" stroke="#F59E0B" strokeWidth="2"/>
+                      </svg>
+                      <span className="text-stone-200 text-sm font-semibold">Training</span>
+                    </div>
+                    <p className="text-stone-400 text-xs text-center">EfficientNet-B3<br/>Mixed FP16 + AdamW</p>
+                  </div>
+
+                  <svg className="w-8 h-8 text-orange-400 hidden md:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+
+                  {/* MLflow Tracking */}
+                  <div className="bg-zinc-800 rounded-xl p-4 border border-cyan-400/40 w-48">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Image src="https://avatars.githubusercontent.com/u/39938107?s=200&v=4" alt="MLflow" width={28} height={28} className="rounded"/>
+                      <span className="text-stone-200 text-sm font-semibold">MLflow</span>
+                    </div>
+                    <p className="text-stone-400 text-xs text-center">Experiment Tracking<br/>Model Registry</p>
+                  </div>
+                </div>
+              </div>
+            </div>
             </div>
           </div>
 
@@ -314,9 +498,9 @@ export default function Home() {
                   <span className="text-stone-400 text-lg">+</span>
 
                   <div className="bg-zinc-800/50 p-4 rounded-lg border border-orange-400/30 text-center min-w-[140px]">
-                    <div className="w-10 h-10 mx-auto mb-2 flex items-center justify-center bg-white rounded-lg">
-                      <span className="text-xl font-bold text-black">G</span>
-                    </div>
+                    <svg className="w-10 h-10 mx-auto mb-2" viewBox="0 0 24 24" fill="none">
+                      <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="#F55036" stroke="#F55036" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
                     <p className="text-stone-200 text-sm font-semibold">Groq LLM</p>
                     <p className="text-stone-500 text-xs">Scene Description</p>
                   </div>
@@ -464,9 +648,9 @@ export default function Home() {
                           <p className="text-stone-500 text-xs">Fallback</p>
                         </div>
                         <div className="bg-zinc-900 p-3 rounded-lg border border-orange-400/20 text-center">
-                          <div className="w-7 h-7 mx-auto mb-1 flex items-center justify-center bg-white rounded-lg">
-                            <span className="text-sm font-bold text-black">G</span>
-                          </div>
+                          <svg className="w-7 h-7 mx-auto mb-1" viewBox="0 0 24 24" fill="none">
+                            <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="#F55036" stroke="#F55036" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
                           <p className="text-stone-200 text-xs font-semibold">Groq</p>
                           <p className="text-stone-500 text-xs">LLM</p>
                         </div>
@@ -610,100 +794,121 @@ export default function Home() {
 
       </div>
 
-      {/* Technology Stack Section */}
+      {/* Performance Metrics Section */}
       <div id="about" className="py-24 px-8 bg-gradient-to-b from-stone-900 to-zinc-950">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-5xl font-bold text-center text-stone-100 mb-12 tracking-tight">Built With</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {/* PyTorch */}
-            <div className="bg-zinc-900/50 backdrop-blur-md rounded-xl p-6 border border-stone-700/30 hover:border-orange-400/50 transition-all duration-300 flex flex-col items-center text-center group">
-              <Image 
-                src="https://www.vectorlogo.zone/logos/pytorch/pytorch-icon.svg" 
-                alt="PyTorch"
-                width={48}
-                height={48}
-                className="mb-3 group-hover:scale-110 transition-transform duration-300"
-              />
-              <h3 className="text-stone-200 font-semibold mb-1">PyTorch</h3>
-              <p className="text-stone-500 text-xs">Deep Learning</p>
-            </div>
-
-            {/* AWS */}
-            <div className="bg-zinc-900/50 backdrop-blur-md rounded-xl p-6 border border-stone-700/30 hover:border-orange-400/50 transition-all duration-300 flex flex-col items-center text-center group">
-              <Image 
-                src="https://www.vectorlogo.zone/logos/amazon_aws/amazon_aws-icon.svg" 
-                alt="AWS"
-                width={48}
-                height={48}
-                className="mb-3 group-hover:scale-110 transition-transform duration-300"
-              />
-              <h3 className="text-stone-200 font-semibold mb-1">AWS</h3>
-              <p className="text-stone-500 text-xs">Cloud Infrastructure</p>
-            </div>
-
-            {/* Google Cloud */}
-            <div className="bg-zinc-900/50 backdrop-blur-md rounded-xl p-6 border border-stone-700/30 hover:border-orange-400/50 transition-all duration-300 flex flex-col items-center text-center group">
-              <Image 
-                src="https://www.vectorlogo.zone/logos/google_cloud/google_cloud-icon.svg" 
-                alt="Google Cloud"
-                width={48}
-                height={48}
-                className="mb-3 group-hover:scale-110 transition-transform duration-300"
-              />
-              <h3 className="text-stone-200 font-semibold mb-1">Google Vision</h3>
-              <p className="text-stone-500 text-xs">Vision API</p>
-            </div>
-
-            {/* Next.js */}
-            <div className="bg-zinc-900/50 backdrop-blur-md rounded-xl p-6 border border-stone-700/30 hover:border-orange-400/50 transition-all duration-300 flex flex-col items-center text-center group">
-              <Image 
-                src="https://www.vectorlogo.zone/logos/nextjs/nextjs-icon.svg" 
-                alt="Next.js"
-                width={48}
-                height={48}
-                className="mb-3 group-hover:scale-110 transition-transform duration-300 invert"
-              />
-              <h3 className="text-stone-200 font-semibold mb-1">Next.js</h3>
-              <p className="text-stone-500 text-xs">Frontend Framework</p>
-            </div>
-
-            {/* FastAPI */}
-            <div className="bg-zinc-900/50 backdrop-blur-md rounded-xl p-6 border border-stone-700/30 hover:border-orange-400/50 transition-all duration-300 flex flex-col items-center text-center group">
-              <svg className="w-12 h-12 mb-3 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="none">
-                <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="#009688" stroke="#009688" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <h3 className="text-stone-200 font-semibold mb-1">FastAPI</h3>
-              <p className="text-stone-500 text-xs">Backend API</p>
-            </div>
-
-            {/* OpenAI */}
-            <div className="bg-zinc-900/50 backdrop-blur-md rounded-xl p-6 border border-stone-700/30 hover:border-orange-400/50 transition-all duration-300 flex flex-col items-center text-center group">
-              <svg className="w-12 h-12 mb-3 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="none">
-                <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z" fill="#10A37F"/>
-              </svg>
-              <h3 className="text-stone-200 font-semibold mb-1">OpenAI CLIP</h3>
-              <p className="text-stone-500 text-xs">Embeddings</p>
-            </div>
-
-            {/* DynamoDB */}
-            <div className="bg-zinc-900/50 backdrop-blur-md rounded-xl p-6 border border-stone-700/30 hover:border-orange-400/50 transition-all duration-300 flex flex-col items-center text-center group">
-              <svg className="w-12 h-12 mb-3 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 80 80" fill="none">
-                <path d="M40 10L10 25v30l30 15 30-15V25L40 10z" fill="#527FFF"/>
-                <ellipse cx="40" cy="25" rx="30" ry="8" fill="#2D72F0"/>
-                <path d="M10 25v30c0 4.4 13.4 8 30 8s30-3.6 30-8V25c0 4.4-13.4 8-30 8s-30-3.6-30-8z" fill="#2D72F0" opacity="0.7"/>
-                <ellipse cx="40" cy="55" rx="30" ry="8" fill="#1A5DC7"/>
-              </svg>
-              <h3 className="text-stone-200 font-semibold mb-1">DynamoDB</h3>
-              <p className="text-stone-500 text-xs">Database</p>
-            </div>
-
-            {/* Groq */}
-            <div className="bg-zinc-900/50 backdrop-blur-md rounded-xl p-6 border border-stone-700/30 hover:border-orange-400/50 transition-all duration-300 flex flex-col items-center text-center group">
-              <div className="w-12 h-12 mb-3 group-hover:scale-110 transition-transform duration-300 flex items-center justify-center bg-white rounded-lg">
-                <span className="text-2xl font-bold text-black">G</span>
+          <h2 className="text-5xl font-bold text-center text-stone-100 mb-4 tracking-tight">Performance Metrics</h2>
+          <p className="text-center text-stone-400 mb-12 max-w-2xl mx-auto">
+            Trained on 500 landmark classes over 20 hours using transfer learning from ImageNet
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+            {/* Model Accuracy */}
+            <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-md rounded-2xl p-8 border border-orange-400/30 hover:border-orange-400/60 transition-all duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <svg className="w-12 h-12" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                </svg>
+                <div className="text-right">
+                  <p className="text-4xl font-bold text-orange-400">81%</p>
+                  <p className="text-stone-500 text-sm">Top-1 Accuracy</p>
+                </div>
               </div>
-              <h3 className="text-stone-200 font-semibold mb-1">Groq</h3>
-              <p className="text-stone-500 text-xs">LLM Inference</p>
+              <h3 className="text-stone-200 font-semibold mb-2">Model Accuracy</h3>
+              <p className="text-stone-400 text-sm">500-class landmark classification on validation set</p>
+            </div>
+
+            {/* Inference Speed */}
+            <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-md rounded-2xl p-8 border border-green-400/30 hover:border-green-400/60 transition-all duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <svg className="w-12 h-12" viewBox="0 0 24 24" fill="none">
+                  <path d="M13 10V3L4 14h7v7l9-11h-7z" fill="#10B981"/>
+                </svg>
+                <div className="text-right">
+                  <p className="text-4xl font-bold text-green-400">~2s</p>
+                  <p className="text-stone-500 text-sm">Average</p>
+                </div>
+              </div>
+              <h3 className="text-stone-200 font-semibold mb-2">Inference Speed</h3>
+              <p className="text-stone-400 text-sm">End-to-end prediction time on HuggingFace Spaces</p>
+            </div>
+
+            {/* Dataset Coverage */}
+            <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 backdrop-blur-md rounded-2xl p-8 border border-blue-400/30 hover:border-blue-400/60 transition-all duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <svg className="w-12 h-12" viewBox="0 0 24 24" fill="none">
+                  <path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                </svg>
+                <div className="text-right">
+                  <p className="text-4xl font-bold text-blue-400">4,946</p>
+                  <p className="text-stone-500 text-sm">Landmarks</p>
+                </div>
+              </div>
+              <h3 className="text-stone-200 font-semibold mb-2">Global Coverage</h3>
+              <p className="text-stone-400 text-sm">CLIP embeddings for similarity search fallback</p>
+            </div>
+          </div>
+
+          {/* Acknowledgments */}
+          <div className="border-t border-stone-700/30 pt-8 mt-8">
+            <h3 className="text-sm font-medium text-center text-stone-400 mb-6 uppercase tracking-wider">Powered By</h3>
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+              {/* Vercel */}
+              <div className="bg-zinc-900/20 rounded-lg p-3 border border-stone-700/40 hover:border-stone-600/60 transition-all duration-300 flex flex-col items-center text-center group">
+                <Image 
+                  src="https://www.vectorlogo.zone/logos/vercel/vercel-icon.svg" 
+                  alt="Vercel"
+                  width={28}
+                  height={28}
+                  className="mb-1 group-hover:scale-110 transition-transform duration-300 invert"
+                />
+                <h4 className="text-stone-400 text-xs">Vercel</h4>
+              </div>
+
+              {/* Groq */}
+              <div className="bg-zinc-900/20 rounded-lg p-3 border border-stone-700/40 hover:border-stone-600/60 transition-all duration-300 flex flex-col items-center text-center group">
+                <svg className="w-7 h-7 mb-1 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="none">
+                  <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="#F55036" stroke="#F55036" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <h4 className="text-stone-400 text-xs">Groq</h4>
+              </div>
+
+              {/* HuggingFace */}
+              <div className="bg-zinc-900/20 rounded-lg p-3 border border-stone-700/40 hover:border-stone-600/60 transition-all duration-300 flex flex-col items-center text-center group">
+                <div className="text-2xl mb-1 group-hover:scale-110 transition-transform duration-300">🤗</div>
+                <h4 className="text-stone-400 text-xs">HuggingFace</h4>
+              </div>
+
+              {/* OpenAI CLIP */}
+              <div className="bg-zinc-900/20 rounded-lg p-3 border border-stone-700/40 hover:border-stone-600/60 transition-all duration-300 flex flex-col items-center text-center group">
+                <svg className="w-7 h-7 mb-1 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 24 24" fill="none">
+                  <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z" fill="#10A37F"/>
+                </svg>
+                <h4 className="text-stone-400 text-xs">OpenAI</h4>
+              </div>
+
+              {/* AWS */}
+              <div className="bg-zinc-900/20 rounded-lg p-3 border border-stone-700/40 hover:border-stone-600/60 transition-all duration-300 flex flex-col items-center text-center group">
+                <svg className="w-9 h-7 mb-1 group-hover:scale-110 transition-transform duration-300" viewBox="0 0 304 182" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M86.4 66.4c0 3.7.4 6.7 1.1 8.9.8 2.2 1.8 4.6 3.2 7.2.5.8.7 1.6.7 2.3 0 1-.6 2-1.9 3l-6.3 4.2c-.9.6-1.8.9-2.6.9-1 0-2-.5-3-1.4-1.4-1.5-2.6-3.1-3.6-4.7-1-1.7-2-3.6-3.1-5.9-7.8 9.2-17.6 13.8-29.4 13.8-8.4 0-15.1-2.4-20-7.2-4.9-4.8-7.4-11.2-7.4-19.2 0-8.5 3-15.4 9.1-20.6 6.1-5.2 14.2-7.8 24.5-7.8 3.4 0 6.9.3 10.6.8 3.7.5 7.5 1.3 11.5 2.2v-7.3c0-7.6-1.6-12.9-4.7-16-3.2-3.1-8.6-4.6-16.3-4.6-3.5 0-7.1.4-10.8 1.3-3.7.9-7.3 2-10.8 3.4-1.6.7-2.8 1.1-3.5 1.3-.7.2-1.2.3-1.6.3-1.4 0-2.1-1-2.1-3.1v-4.9c0-1.6.2-2.8.7-3.5.5-.7 1.4-1.4 2.8-2.1 3.5-1.8 7.7-3.3 12.6-4.5 4.9-1.3 10.1-1.9 15.6-1.9 11.9 0 20.6 2.7 26.2 8.1 5.5 5.4 8.3 13.6 8.3 24.6v32.4zm-40.6 15.2c3.3 0 6.7-.6 10.3-1.8 3.6-1.2 6.8-3.4 9.5-6.4 1.6-1.9 2.8-4 3.4-6.4.6-2.4 1-5.3 1-8.7v-4.2c-2.9-.7-6-1.3-9.2-1.7-3.2-.4-6.3-.6-9.4-.6-6.7 0-11.6 1.3-14.9 4-3.3 2.7-4.9 6.5-4.9 11.5 0 4.7 1.2 8.2 3.7 10.6 2.4 2.5 5.9 3.7 10.5 3.7zm80.3 10.8c-1.8 0-3-.3-3.8-1-.8-.6-1.5-2-2.1-3.9L96.7 10.2c-.6-2-.9-3.3-.9-4 0-1.6.8-2.5 2.4-2.5h9.8c1.9 0 3.2.3 3.9 1 .8.6 1.4 2 2 3.9l16.8 66.2 15.6-66.2c.5-2 1.1-3.3 1.9-3.9.8-.6 2.2-1 4-1h8c1.9 0 3.2.3 4 1 .8.6 1.5 2 1.9 3.9l15.8 67.1 17.3-67.1c.6-2 1.3-3.3 2-3.9.8-.6 2.1-1 3.9-1h9.3c1.6 0 2.5.8 2.5 2.5 0 .5-.1 1-.2 1.6-.1.6-.3 1.4-.7 2.5l-24.1 77.3c-.6 2-1.3 3.3-2.1 3.9-.8.6-2.1 1-3.8 1h-8.6c-1.9 0-3.2-.3-4-1-.8-.7-1.5-2-1.9-4L156 23l-15.4 64.4c-.5 2-1.1 3.3-1.9 4-.8.7-2.2 1-4 1h-8.6zm128.5 2.7c-5.2 0-10.4-.6-15.4-1.8-5-1.2-8.9-2.5-11.5-4-1.6-.9-2.7-1.9-3.1-2.8-.4-.9-.6-1.9-.6-2.8v-5.1c0-2.1.8-3.1 2.3-3.1.6 0 1.2.1 1.8.3.6.2 1.5.6 2.5 1 3.4 1.5 7.1 2.7 11 3.5 4 .8 7.9 1.2 11.9 1.2 6.3 0 11.2-1.1 14.6-3.3 3.4-2.2 5.2-5.4 5.2-9.5 0-2.8-.9-5.1-2.7-7-1.8-1.9-5.2-3.6-10.1-5.2L246 52c-7.3-2.3-12.7-5.7-16-10.2-3.3-4.4-5-9.3-5-14.5 0-4.2.9-7.9 2.7-11.1 1.8-3.2 4.2-6 7.2-8.2 3-2.3 6.4-4 10.4-5.2 4-1.2 8.2-1.7 12.6-1.7 2.2 0 4.5.1 6.7.4 2.3.3 4.4.7 6.5 1.1 2 .5 3.9 1 5.7 1.6 1.8.6 3.2 1.2 4.2 1.8 1.4.8 2.4 1.6 3 2.5.6.8.9 1.9.9 3.3v4.7c0 2.1-.8 3.2-2.3 3.2-.8 0-2.1-.4-3.8-1.2-5.7-2.6-12.1-3.9-19.2-3.9-5.7 0-10.2.9-13.3 2.8-3.1 1.9-4.7 4.8-4.7 8.9 0 2.8 1 5.2 3 7.1 2 1.9 5.7 3.8 11 5.5l14.2 4.5c7.2 2.3 12.4 5.5 15.5 9.6 3.1 4.1 4.6 8.8 4.6 14 0 4.3-.9 8.2-2.6 11.6-1.8 3.4-4.2 6.4-7.3 8.8-3.1 2.5-6.8 4.3-11.1 5.6-4.5 1.4-9.2 2.1-14.3 2.1z" fill="#FF9900"/>
+                  <path d="M273.5 143.7c-32.9 24.3-80.7 37.2-121.8 37.2-57.6 0-109.5-21.3-148.7-56.7-3.1-2.8-.3-6.6 3.4-4.4 42.4 24.6 94.7 39.5 148.8 39.5 36.5 0 76.6-7.6 113.5-23.2 5.5-2.5 10.2 3.6 4.8 7.6zm13.7-15.6c-4.2-5.4-27.8-2.6-38.5-1.3-3.2.4-3.7-2.4-.8-4.5 18.8-13.2 49.7-9.4 53.3-5 3.6 4.5-1 35.4-18.6 50.2-2.7 2.3-5.3 1.1-4.1-1.9 4-9.9 12.9-32.2 8.7-37.5z" fill="#FF9900"/>
+                </svg>
+                <h4 className="text-stone-400 text-xs">AWS</h4>
+              </div>
+
+              {/* Google Landmarks Dataset */}
+              <div className="bg-zinc-900/20 rounded-lg p-3 border border-stone-700/40 hover:border-stone-600/60 transition-all duration-300 flex flex-col items-center text-center group">
+                <Image 
+                  src="https://www.vectorlogo.zone/logos/google/google-icon.svg" 
+                  alt="Google"
+                  width={28}
+                  height={28}
+                  className="mb-1 group-hover:scale-110 transition-transform duration-300"
+                />
+                <h4 className="text-stone-400 text-xs">Google</h4>
+              </div>
+
+
             </div>
           </div>
         </div>
@@ -731,9 +936,9 @@ export default function Home() {
             <div>
               <h3 className="text-stone-300 font-semibold mb-4">Quick Links</h3>
               <ul className="space-y-2 text-sm">
-                <li><a href="#features" className="hover:text-orange-400 transition-colors">Features</a></li>
-                <li><a href="#how-it-works" className="hover:text-orange-400 transition-colors">Technology</a></li>
-                <li><a href="#about" className="hover:text-orange-400 transition-colors">About</a></li>
+                <li><a href="#features" className="hover:text-orange-400 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); const el = document.getElementById('features'); if (el) { const y = el.getBoundingClientRect().top + window.pageYOffset - 100; window.scrollTo({ top: y, behavior: 'smooth' }); } }}>Features</a></li>
+                <li><a href="#how-it-works" className="hover:text-orange-400 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); }}>Technology</a></li>
+                <li><a href="#about" className="hover:text-orange-400 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' }); }}>About</a></li>
                 <li><Link href="/login" className="hover:text-orange-400 transition-colors">Get Started</Link></li>
               </ul>
             </div>
