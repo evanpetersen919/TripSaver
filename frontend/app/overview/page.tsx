@@ -32,6 +32,8 @@ export default function Overview() {
   const [isNewUser, setIsNewUser] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [tripToDelete, setTripToDelete] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"recent" | "name" | "date">("recent");
   const [popularDestinations, setPopularDestinations] = useState<PopularDestination[]>([
     { name: "Japan", country: "Asia", imageUrl: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&h=600&fit=crop" },
@@ -145,12 +147,17 @@ export default function Overview() {
     }
   };
 
-  const handleDeleteTrip = async (tripId: string) => {
-    if (!confirm("Are you sure you want to delete this trip?")) return;
+  const handleDeleteTrip = (tripId: string) => {
+    setTripToDelete(tripId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!tripToDelete) return;
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/trips/${encodeURIComponent(tripId)}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/trips/${encodeURIComponent(tripToDelete)}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -158,10 +165,13 @@ export default function Overview() {
       });
 
       if (response.ok) {
-        setTrips(trips.filter((trip) => trip.id !== tripId));
+        fetchTrips();
       }
     } catch (error) {
       console.error("Error deleting trip:", error);
+    } finally {
+      setShowDeleteModal(false);
+      setTripToDelete(null);
     }
   };
 
@@ -280,7 +290,7 @@ export default function Overview() {
             </div>
             <Link
               href="/plan"
-              className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold"
+              className="px-8 py-3 border-2 border-orange-500 text-orange-400 rounded-xl font-semibold hover:bg-orange-500/10 hover:shadow-lg hover:shadow-orange-500/30 transition-all duration-300"
             >
               + Create New Trip
             </Link>
@@ -475,6 +485,74 @@ export default function Overview() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 border border-stone-800 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <div className="mb-6">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-bold text-white text-center mb-2">Delete Trip?</h3>
+              <p className="text-stone-400 text-center">This action cannot be undone. All trip data will be permanently deleted.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setTripToDelete(null);
+                }}
+                className="flex-1 px-6 py-3 bg-zinc-800 text-stone-300 rounded-lg hover:bg-zinc-700 transition-colors font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 border border-stone-800 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <div className="mb-6">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-bold text-white text-center mb-2">Delete Trip?</h3>
+              <p className="text-stone-400 text-center">This action cannot be undone. All trip data will be permanently deleted.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setTripToDelete(null);
+                }}
+                className="flex-1 px-6 py-3 bg-zinc-800 text-stone-300 rounded-lg hover:bg-zinc-700 transition-colors font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
