@@ -1301,11 +1301,18 @@ async def create_trip(
     """
     Create a new trip for the authenticated user.
     """
-    user_id = require_auth(credentials.credentials)
+    auth_result = require_auth(credentials.credentials)
+    if not auth_result.get('success'):
+        raise HTTPException(status_code=401, detail=auth_result.get('error', 'Unauthorized'))
+    user_id = auth_result['user']['user_id']
     
     try:
         trip_id = f"{user_id}#{int(datetime.utcnow().timestamp() * 1000)}"
         now = datetime.utcnow().isoformat()
+        
+        # Serialize locations as JSON string to avoid DynamoDB float type issues
+        import json
+        locations_json = json.dumps(request.locations)
         
         table.put_item(Item={
             'PK': f'USER#{user_id}',
@@ -1315,7 +1322,7 @@ async def create_trip(
             'destination': request.destination,
             'startDate': request.startDate,
             'endDate': request.endDate,
-            'locations': request.locations,
+            'locations': locations_json,
             'locationCount': len(request.locations),
             'createdAt': now,
             'updatedAt': now,
@@ -1348,7 +1355,10 @@ async def get_trips(
     """
     Get all trips for the authenticated user.
     """
-    user_id = require_auth(credentials.credentials)
+    auth_result = require_auth(credentials.credentials)
+    if not auth_result.get('success'):
+        raise HTTPException(status_code=401, detail=auth_result.get('error', 'Unauthorized'))
+    user_id = auth_result['user']['user_id']
     
     try:
         response = table.query(
@@ -1392,9 +1402,15 @@ async def get_trip(
     """
     Get a specific trip by ID.
     """
-    user_id = require_auth(credentials.credentials)
+    auth_result = require_auth(credentials.credentials)
+    if not auth_result.get('success'):
+        raise HTTPException(status_code=401, detail=auth_result.get('error', 'Unauthorized'))
+    user_id = auth_result['user']['user_id']
     
     try:
+        print(f"[Backend] Getting trip - user_id: {user_id}, trip_id: {trip_id}")
+        print(f"[Backend] Looking for PK: USER#{user_id}, SK: TRIP#{trip_id}")
+        
         response = table.get_item(
             Key={
                 'PK': f'USER#{user_id}',
@@ -1402,9 +1418,16 @@ async def get_trip(
             }
         )
         
+        print(f"[Backend] DynamoDB response: {response}")
+        
         trip = response.get('Item')
         if not trip:
+            print(f"[Backend] Trip not found in response")
             raise HTTPException(status_code=404, detail="Trip not found")
+        
+        # Parse locations JSON
+        import json
+        locations = json.loads(trip.get('locations', '[]')) if isinstance(trip.get('locations'), str) else trip.get('locations', [])
         
         return {
             'id': trip.get('trip_id', ''),
@@ -1412,7 +1435,7 @@ async def get_trip(
             'destination': trip.get('destination', ''),
             'startDate': trip.get('startDate', ''),
             'endDate': trip.get('endDate', ''),
-            'locations': trip.get('locations', []),
+            'locations': locations,
             'locationCount': trip.get('locationCount', 0),
             'createdAt': trip.get('createdAt', ''),
             'updatedAt': trip.get('updatedAt', '')
@@ -1431,7 +1454,10 @@ async def update_trip(
     """
     Update an existing trip.
     """
-    user_id = require_auth(credentials.credentials)
+    auth_result = require_auth(credentials.credentials)
+    if not auth_result.get('success'):
+        raise HTTPException(status_code=401, detail=auth_result.get('error', 'Unauthorized'))
+    user_id = auth_result['user']['user_id']
     
     try:
         # Get existing trip first
@@ -1467,8 +1493,9 @@ async def update_trip(
             expression_values[':end'] = request.endDate
         
         if request.locations is not None:
+            import json
             update_expression += ", locations = :locs, locationCount = :count"
-            expression_values[':locs'] = request.locations
+            expression_values[':locs'] = json.dumps(request.locations)
             expression_values[':count'] = len(request.locations)
         
         # Perform update
@@ -1496,7 +1523,10 @@ async def delete_trip(
     """
     Delete a trip.
     """
-    user_id = require_auth(credentials.credentials)
+    auth_result = require_auth(credentials.credentials)
+    if not auth_result.get('success'):
+        raise HTTPException(status_code=401, detail=auth_result.get('error', 'Unauthorized'))
+    user_id = auth_result['user']['user_id']
     
     try:
         table.delete_item(

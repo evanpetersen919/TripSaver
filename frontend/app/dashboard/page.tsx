@@ -190,31 +190,96 @@ export default function Dashboard() {
   const destinationDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    console.log('[Dashboard] Full URL:', window.location.href);
+    console.log('[Dashboard] Search string:', window.location.search);
     const params = new URLSearchParams(window.location.search);
-    const dest = params.get('destination');
-    const name = params.get('name');
-    const start = params.get('start');
-    const end = params.get('end');
-    const lat = params.get('lat');
-    const lng = params.get('lng');
+    const tripId = params.get('tripId');
+    console.log('[Dashboard] Extracted tripId:', tripId);
+    
+    // If editing existing trip, load it
+    if (tripId) {
+      console.log('[Dashboard] Loading trip:', tripId);
+      const loadTrip = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const url = `${process.env.NEXT_PUBLIC_API_URL}/api/trips/${encodeURIComponent(tripId)}`;
+          console.log('[Dashboard] Fetching from:', url);
+          
+          const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          console.log('[Dashboard] Response status:', response.status);
+          
+          if (response.ok) {
+            const trip = await response.json();
+            console.log('[Dashboard] Loaded trip data:', trip);
+            
+            setTripName(trip.name || 'My Trip');
+            setDestination(trip.destination || '');
+            setDestinationInput(trip.destination || '');
+            setStartDate(trip.startDate || '');
+            setEndDate(trip.endDate || '');
+            
+            // Set destination coordinates if available
+            if (trip.destination) {
+              const destLower = trip.destination.toLowerCase();
+              if (DESTINATION_IMAGES[destLower]) {
+                setDestinationImage(DESTINATION_IMAGES[destLower]);
+              }
+            }
+            
+            if (trip.locations && Array.isArray(trip.locations)) {
+              const loadedLocations = trip.locations.map((loc: any) => ({
+                id: loc.id || Math.random().toString(),
+                name: loc.name || '',
+                lat: loc.lat || 0,
+                lng: loc.lng || 0,
+                image: loc.image,
+                confidence: loc.confidence,
+                day: loc.day || 1,
+                time: loc.time,
+                notes: loc.notes
+              }));
+              setLocations(loadedLocations);
+              console.log('[Dashboard] Loaded locations:', loadedLocations.length);
+            }
+          } else {
+            const errorText = await response.text();
+            console.error('[Dashboard] Failed to load trip:', errorText);
+          }
+        } catch (error) {
+          console.error('[Dashboard] Error loading trip:', error);
+        }
+      };
+      loadTrip();
+    } else {
+      // New trip from /plan page
+      const dest = params.get('destination');
+      const name = params.get('name');
+      const start = params.get('start');
+      const end = params.get('end');
+      const lat = params.get('lat');
+      const lng = params.get('lng');
 
-    if (dest) setDestination(dest);
-    if (name) setTripName(name);
-    if (start) setStartDate(start);
-    if (end) setEndDate(end);
-    if (lat && lat !== 'undefined') {
-      const parsedLat = parseFloat(lat);
-      if (!isNaN(parsedLat)) setDestinationLat(parsedLat);
-    }
-    if (lng && lng !== 'undefined') {
-      const parsedLng = parseFloat(lng);
-      if (!isNaN(parsedLng)) setDestinationLng(parsedLng);
-    }
+      if (dest) setDestination(dest);
+      if (name) setTripName(name);
+      if (start) setStartDate(start);
+      if (end) setEndDate(end);
+      if (lat && lat !== 'undefined') {
+        const parsedLat = parseFloat(lat);
+        if (!isNaN(parsedLat)) setDestinationLat(parsedLat);
+      }
+      if (lng && lng !== 'undefined') {
+        const parsedLng = parseFloat(lng);
+        if (!isNaN(parsedLng)) setDestinationLng(parsedLng);
+      }
 
-    if (dest) {
-      const destLower = dest.toLowerCase();
-      if (DESTINATION_IMAGES[destLower]) {
-        setDestinationImage(DESTINATION_IMAGES[destLower]);
+      if (dest) {
+        const destLower = dest.toLowerCase();
+        if (DESTINATION_IMAGES[destLower]) {
+          setDestinationImage(DESTINATION_IMAGES[destLower]);
+        }
       }
     }
   }, []);
@@ -1105,6 +1170,69 @@ export default function Dashboard() {
     }
   };
 
+  const handleSaveTrip = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('Please login to save trips');
+        router.push('/login');
+        return;
+      }
+
+      // Validate required fields
+      if (!tripName.trim() || !destination.trim()) {
+        console.error('Please fill in trip name and destination before saving');
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const tripId = params.get('tripId');
+
+      const tripData = {
+        name: tripName.trim(),
+        destination: destination.trim(),
+        startDate: startDate || new Date().toISOString().split('T')[0],
+        endDate: endDate || new Date().toISOString().split('T')[0],
+        locations: locations.map(loc => ({
+          id: loc.id,
+          name: loc.name,
+          lat: loc.lat,
+          lng: loc.lng,
+          image: loc.image,
+          confidence: loc.confidence,
+          day: loc.day,
+          time: loc.time,
+          notes: loc.notes
+        }))
+      };
+
+      const url = tripId 
+        ? `${process.env.NEXT_PUBLIC_API_URL}/api/trips/${encodeURIComponent(tripId)}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/api/trips`;
+      
+      const method = tripId ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(tripData)
+      });
+
+      if (response.ok) {
+        // Redirect immediately without blocking alert
+        router.push('/overview');
+      } else {
+        const error = await response.text();
+        console.error(`Failed to save trip: ${error}`);
+      }
+    } catch (error) {
+      console.error('Error saving trip:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-900 via-stone-900 to-zinc-900 flex flex-col">
       <style jsx global>{borderAnimationStyles}</style>
@@ -1204,12 +1332,20 @@ export default function Dashboard() {
               </button>
             )}
           </div>
-          <button 
-            onClick={handleShare}
-            className="text-stone-400 hover:text-stone-300 hover:text-orange-400 px-3 py-1.5 transition-colors text-sm"
-          >
-            Share
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleSaveTrip}
+              className="px-4 py-1.5 border-2 border-orange-500 text-orange-400 rounded-lg hover:bg-orange-500/10 hover:shadow-lg hover:shadow-orange-500/20 transition-all text-sm font-semibold"
+            >
+              Save Trip
+            </button>
+            <button 
+              onClick={handleShare}
+              className="text-stone-400 hover:text-orange-400 px-3 py-1.5 transition-colors text-sm"
+            >
+              Share
+            </button>
+          </div>
         </div>
       </div>
 

@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import dynamic from "next/dynamic";
+
+const Globe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
 interface Trip {
   id: string;
@@ -22,6 +25,7 @@ export default function Overview() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
+  const [allLocations, setAllLocations] = useState<Array<{lat: number; lng: number; name: string}>>([]);
 
   useEffect(() => {
     // Handle OAuth callback token
@@ -65,7 +69,37 @@ export default function Overview() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('[Overview] Fetched trips:', data.trips);
+        console.log('[Overview] First trip structure:', JSON.stringify(data.trips[0], null, 2));
         setTrips(data.trips || []);
+        
+        // Fetch full details for each trip to get locations for globe
+        const locations: Array<{lat: number; lng: number; name: string}> = [];
+        for (const trip of data.trips || []) {
+          try {
+            const detailResponse = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/api/trips/${encodeURIComponent(trip.id)}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (detailResponse.ok) {
+              const detailData = await detailResponse.json();
+              if (detailData.locations && Array.isArray(detailData.locations)) {
+                detailData.locations.forEach((loc: any) => {
+                  if (loc.lat && loc.lng) {
+                    locations.push({
+                      lat: loc.lat,
+                      lng: loc.lng,
+                      name: loc.name || 'Location'
+                    });
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`Error fetching trip ${trip.id}:`, err);
+          }
+        }
+        setAllLocations(locations);
       }
     } catch (error) {
       console.error("Error fetching trips:", error);
@@ -79,7 +113,7 @@ export default function Overview() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/trips/${tripId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/trips/${encodeURIComponent(tripId)}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -143,6 +177,55 @@ export default function Overview() {
           </Link>
         </div>
 
+        {/* Interactive Globe */}
+        {!loading && (
+          <div className="mb-12 bg-gradient-to-br from-zinc-900/50 to-stone-900/50 border border-stone-800 rounded-2xl overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-stone-100">Your Travel Map</h2>
+                  <p className="text-stone-400 text-sm">
+                    {trips.length > 0 
+                      ? "Interactive visualization of your journey" 
+                      : "Start planning trips to see them on the globe"}
+                  </p>
+                </div>
+                {trips.length > 0 && (
+                  <div className="flex gap-4">
+                    <div className="text-center px-4 py-2 bg-zinc-900/50 rounded-lg border border-stone-800">
+                      <div className="text-2xl font-bold text-orange-400">{trips.length}</div>
+                      <div className="text-xs text-stone-500">Trips</div>
+                    </div>
+                    <div className="text-center px-4 py-2 bg-zinc-900/50 rounded-lg border border-stone-800">
+                      <div className="text-2xl font-bold text-orange-400">
+                        {trips.reduce((sum, trip) => sum + (trip.locationCount || 0), 0)}
+                      </div>
+                      <div className="text-xs text-stone-500">Locations</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="relative w-full h-[500px] rounded-xl overflow-hidden bg-zinc-950">
+                <Globe
+                  globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+                  backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+                  pointsData={allLocations}
+                  pointLat="lat"
+                  pointLng="lng"
+                  pointAltitude={0.01}
+                  pointColor={() => '#f97316'}
+                  pointRadius={0.5}
+                  pointLabel={(d: any) => d.name}
+                  atmosphereColor="#f97316"
+                  atmosphereAltitude={0.15}
+                  width={undefined}
+                  height={500}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Loading State */}
         {loading && (
           <div className="text-center py-20">
@@ -205,7 +288,7 @@ export default function Overview() {
                   {/* Action Buttons */}
                   <div className="flex gap-3">
                     <Link
-                      href={`/dashboard?tripId=${trip.id}`}
+                      href={`/dashboard?tripId=${encodeURIComponent(trip.id)}`}
                       className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-center font-medium"
                     >
                       Edit
