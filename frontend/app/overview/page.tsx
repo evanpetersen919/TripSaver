@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -23,7 +23,7 @@ interface PopularDestination {
   imageUrl: string;
 }
 
-export default function Overview() {
+function OverviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -555,5 +555,20 @@ export default function Overview() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function Overview() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent mb-4"></div>
+          <p className="text-zinc-400">Loading your trips...</p>
+        </div>
+      </div>
+    }>
+      <OverviewContent />
+    </Suspense>
   );
 }
