@@ -269,6 +269,42 @@ Resources:
             RestApiId: !Ref LocationClassifierAPI
             Path: /feedback
             Method: POST
+        
+        # Trip endpoints
+        CreateTrip:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /api/trips
+            Method: POST
+        
+        GetTrips:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /api/trips
+            Method: GET
+        
+        GetTrip:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /api/trips/{trip_id}
+            Method: GET
+        
+        UpdateTrip:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /api/trips/{trip_id}
+            Method: PUT
+        
+        DeleteTrip:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LocationClassifierAPI
+            Path: /api/trips/{trip_id}
+            Method: DELETE
 
   # ==========================================================================
   # CLOUDWATCH LOGGING
