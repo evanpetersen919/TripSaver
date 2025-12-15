@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import dynamic from "next/dynamic";
-
-const Globe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
 interface Trip {
   id: string;
@@ -19,25 +16,95 @@ interface Trip {
   updatedAt: string;
 }
 
+interface PopularDestination {
+  name: string;
+  country: string;
+  photoReference?: string;
+  imageUrl: string;
+}
+
 export default function Overview() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
-  const [allLocations, setAllLocations] = useState<Array<{lat: number; lng: number; name: string}>>([]);
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"recent" | "name" | "date">("recent");
+  const [popularDestinations, setPopularDestinations] = useState<PopularDestination[]>([
+    { name: "Japan", country: "Asia", imageUrl: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&h=600&fit=crop" },
+    { name: "France", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&h=600&fit=crop" },
+    { name: "Italy", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&h=600&fit=crop" },
+    { name: "USA", country: "North America", imageUrl: "https://images.unsplash.com/photo-1485738422979-f5c462d49f74?w=800&h=600&fit=crop" },
+    { name: "Spain", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop" },
+    { name: "Greece", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&h=600&fit=crop" },
+    { name: "Thailand", country: "Asia", imageUrl: "https://images.unsplash.com/photo-1519451241324-20b4ea2c4220?w=800&h=600&fit=crop" },
+    { name: "Australia", country: "Oceania", imageUrl: "https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=800&h=600&fit=crop" },
+    { name: "United Kingdom", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop" },
+    { name: "Canada", country: "North America", imageUrl: "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=800&h=600&fit=crop" },
+    { name: "Germany", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&h=600&fit=crop" },
+    { name: "Iceland", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&h=600&fit=crop" },
+  ]);
+
+  // Filter and sort trips
+  const filteredTrips = trips
+    .filter(trip => 
+      trip.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      trip.destination.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (sortBy === "recent") return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "date") return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+      return 0;
+    });
+
+  // Calculate trip statistics
+  const now = new Date();
+  const upcomingTrips = trips.filter(trip => new Date(trip.startDate) > now);
+  const pastTrips = trips.filter(trip => new Date(trip.endDate) < now);
+  const activeTrips = trips.filter(trip => 
+    new Date(trip.startDate) <= now && new Date(trip.endDate) >= now
+  );
+
+  // Get trip status
+  const getTripStatus = (trip: Trip) => {
+    const start = new Date(trip.startDate);
+    const end = new Date(trip.endDate);
+    if (start > now) return "upcoming";
+    if (end < now) return "past";
+    return "active";
+  };
 
   useEffect(() => {
     // Handle OAuth callback token
     const urlToken = searchParams.get('token');
     const urlUsername = searchParams.get('username');
+    const newUserParam = searchParams.get('new_user');
+    
     if (urlToken) {
       localStorage.setItem('token', urlToken);
       if (urlUsername) {
         localStorage.setItem('user', JSON.stringify({ name: urlUsername }));
       }
+      // Check if this is a new user signup
+      if (newUserParam === 'true') {
+        setIsNewUser(true);
+        localStorage.setItem('welcome_shown', 'false');
+      }
       // Clean URL
       window.history.replaceState({}, '', '/overview');
+    }
+
+    // Check if user just logged in (not a refresh)
+    const hasSeenWelcome = sessionStorage.getItem('welcome_seen');
+    if (!hasSeenWelcome) {
+      sessionStorage.setItem('welcome_seen', 'true');
+      setShowWelcome(true);
+    } else {
+      setShowWelcome(false);
     }
 
     // Check authentication
@@ -69,37 +136,7 @@ export default function Overview() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('[Overview] Fetched trips:', data.trips);
-        console.log('[Overview] First trip structure:', JSON.stringify(data.trips[0], null, 2));
         setTrips(data.trips || []);
-        
-        // Fetch full details for each trip to get locations for globe
-        const locations: Array<{lat: number; lng: number; name: string}> = [];
-        for (const trip of data.trips || []) {
-          try {
-            const detailResponse = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/api/trips/${encodeURIComponent(trip.id)}`,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-            if (detailResponse.ok) {
-              const detailData = await detailResponse.json();
-              if (detailData.locations && Array.isArray(detailData.locations)) {
-                detailData.locations.forEach((loc: any) => {
-                  if (loc.lat && loc.lng) {
-                    locations.push({
-                      lat: loc.lat,
-                      lng: loc.lng,
-                      name: loc.name || 'Location'
-                    });
-                  }
-                });
-              }
-            }
-          } catch (err) {
-            console.error(`Error fetching trip ${trip.id}:`, err);
-          }
-        }
-        setAllLocations(locations);
       }
     } catch (error) {
       console.error("Error fetching trips:", error);
@@ -135,7 +172,7 @@ export default function Overview() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-stone-950 to-zinc-950">
+    <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-stone-950 to-zinc-950 overflow-x-hidden">
       {/* Header */}
       <header className="bg-zinc-900/50 backdrop-blur-md border-b border-stone-800 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
@@ -161,111 +198,184 @@ export default function Overview() {
         </div>
       </header>
 
+      {/* Welcome Banner */}
+      {showWelcome && (
+        <div className="bg-zinc-950">
+          <div className="max-w-7xl mx-auto px-8 py-10">
+            <div className="text-center">
+              {isNewUser ? (
+                <>
+                  <h1 className="text-4xl md:text-5xl font-bold text-stone-100 mb-3">
+                    Welcome, {userName}
+                  </h1>
+                  <p className="text-stone-400 text-lg">
+                    Your journey begins here. Create your first trip or discover new destinations.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1 className="text-4xl md:text-5xl font-bold text-stone-100 mb-3">
+                    Welcome back, {userName}
+                  </h1>
+                  <p className="text-stone-400 text-lg">
+                    Continue planning your next adventure.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-8 py-12">
-        {/* Page Title & Create Button */}
-        <div className="flex items-center justify-between mb-12">
-          <div>
-            <h1 className="text-5xl font-bold text-stone-100 mb-2">My Trips</h1>
-            <p className="text-stone-400">Plan, manage, and explore your travel itineraries</p>
-          </div>
-          <Link
-            href="/plan"
-            className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold"
-          >
-            + Create New Trip
-          </Link>
-        </div>
-
-        {/* Interactive Globe */}
-        {!loading && (
-          <div className="mb-12 bg-gradient-to-br from-zinc-900/50 to-stone-900/50 border border-stone-800 rounded-2xl overflow-hidden">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-stone-100">Your Travel Map</h2>
-                  <p className="text-stone-400 text-sm">
-                    {trips.length > 0 
-                      ? "Interactive visualization of your journey" 
-                      : "Start planning trips to see them on the globe"}
-                  </p>
-                </div>
-                {trips.length > 0 && (
-                  <div className="flex gap-4">
-                    <div className="text-center px-4 py-2 bg-zinc-900/50 rounded-lg border border-stone-800">
-                      <div className="text-2xl font-bold text-orange-400">{trips.length}</div>
-                      <div className="text-xs text-stone-500">Trips</div>
-                    </div>
-                    <div className="text-center px-4 py-2 bg-zinc-900/50 rounded-lg border border-stone-800">
-                      <div className="text-2xl font-bold text-orange-400">
-                        {trips.reduce((sum, trip) => sum + (trip.locationCount || 0), 0)}
-                      </div>
-                      <div className="text-xs text-stone-500">Locations</div>
-                    </div>
-                  </div>
-                )}
+        {/* Statistics Cards */}
+        {!loading && trips.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+            <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-stone-400 text-sm">Total Trips</span>
+                <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
               </div>
-              <div className="relative w-full h-[500px] rounded-xl overflow-hidden bg-zinc-950">
-                <Globe
-                  globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
-                  backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
-                  pointsData={allLocations}
-                  pointLat="lat"
-                  pointLng="lng"
-                  pointAltitude={0.01}
-                  pointColor={() => '#f97316'}
-                  pointRadius={0.5}
-                  pointLabel={(d: any) => d.name}
-                  atmosphereColor="#f97316"
-                  atmosphereAltitude={0.15}
-                  width={undefined}
-                  height={500}
-                />
+              <p className="text-3xl font-bold text-white">{trips.length}</p>
+            </div>
+            <div className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-stone-400 text-sm">Upcoming</span>
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
               </div>
+              <p className="text-3xl font-bold text-white">{upcomingTrips.length}</p>
+            </div>
+            <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-stone-400 text-sm">Active Now</span>
+                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p className="text-3xl font-bold text-white">{activeTrips.length}</p>
+            </div>
+            <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-stone-400 text-sm">Completed</span>
+                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+              </div>
+              <p className="text-3xl font-bold text-white">{pastTrips.length}</p>
             </div>
           </div>
         )}
 
-        {/* Loading State */}
-        {loading && (
-          <div className="text-center py-20">
-            <div className="inline-block w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-stone-400 mt-4">Loading your trips...</p>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && trips.length === 0 && (
-          <div className="text-center py-20">
-            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-zinc-900 flex items-center justify-center">
-              <svg className="w-12 h-12 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-              </svg>
+        {/* My Locations Section */}
+        <div className="mb-16">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-4xl font-bold text-stone-100 mb-2">My Locations</h2>
+              <p className="text-stone-400">Your saved trips and destinations</p>
             </div>
-            <h2 className="text-2xl font-semibold text-stone-200 mb-2">No trips yet</h2>
-            <p className="text-stone-500 mb-6">Start planning your next adventure!</p>
             <Link
               href="/plan"
-              className="inline-block px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold"
+              className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold"
             >
-              Create Your First Trip
+              + Create New Trip
             </Link>
           </div>
-        )}
 
-        {/* Trips Grid */}
-        {!loading && trips.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {trips.map((trip) => (
+          {/* Search and Filter Bar */}
+          {!loading && trips.length > 0 && (
+            <div className="flex flex-col md:flex-row gap-4 mb-6">
+              {/* Search */}
+              <div className="flex-1 relative">
+                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search trips by name or destination..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-zinc-900/50 border border-stone-800 rounded-lg text-stone-100 placeholder-stone-500 focus:outline-none focus:border-orange-500 transition-colors"
+                />
+              </div>
+
+              {/* Sort Dropdown */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="px-4 py-3 bg-zinc-900/50 border border-stone-800 rounded-lg text-stone-100 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-colors cursor-pointer appearance-none bg-no-repeat bg-right pr-10"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a8a29e'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundSize: '1.5rem',
+                  backgroundPosition: 'right 0.5rem center'
+                }}
+              >
+                <option value="recent" className="bg-zinc-900 text-stone-100">Recently Updated</option>
+                <option value="name" className="bg-zinc-900 text-stone-100">Name (A-Z)</option>
+                <option value="date" className="bg-zinc-900 text-stone-100">Start Date</option>
+              </select>
+            </div>
+          )}
+          {/* Loading State */}
+          {loading && (
+            <div className="text-center py-20">
+              <div className="inline-block w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-stone-400 mt-4">Loading your trips...</p>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!loading && trips.length === 0 && (
+            <div className="text-center py-12 bg-zinc-900/30 rounded-xl border border-stone-800 border-dashed">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-900 flex items-center justify-center">
+                <svg className="w-8 h-8 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-stone-300 mb-1">No saved trips</h3>
+              <p className="text-stone-500 text-sm">Create your first trip to get started</p>
+            </div>
+          )}
+
+          {/* No Results */}
+          {!loading && trips.length > 0 && filteredTrips.length === 0 && (
+            <div className="text-center py-12 bg-zinc-900/30 rounded-xl border border-stone-800">
+              <svg className="w-16 h-16 mx-auto mb-4 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <h3 className="text-xl font-semibold text-stone-300 mb-1">No trips found</h3>
+              <p className="text-stone-500 text-sm">Try adjusting your search or filters</p>
+            </div>
+          )}
+
+          {/* Trips Grid */}
+          {!loading && filteredTrips.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTrips.map((trip) => (
               <div
                 key={trip.id}
                 className="bg-zinc-900/50 backdrop-blur-sm rounded-xl border border-stone-800 hover:border-orange-400/50 transition-all duration-300 overflow-hidden group"
               >
                 {/* Trip Header */}
                 <div className="p-6">
-                  <h3 className="text-xl font-semibold text-stone-100 mb-2 group-hover:text-orange-400 transition-colors">
-                    {trip.name}
-                  </h3>
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="text-xl font-semibold text-stone-100 group-hover:text-orange-400 transition-colors flex-1">
+                      {trip.name}
+                    </h3>
+                    {getTripStatus(trip) === "upcoming" && (
+                      <span className="ml-2 px-2 py-1 text-xs font-semibold bg-blue-500/20 text-blue-400 rounded-full">Upcoming</span>
+                    )}
+                    {getTripStatus(trip) === "active" && (
+                      <span className="ml-2 px-2 py-1 text-xs font-semibold bg-green-500/20 text-green-400 rounded-full">Active</span>
+                    )}
+                    {getTripStatus(trip) === "past" && (
+                      <span className="ml-2 px-2 py-1 text-xs font-semibold bg-stone-500/20 text-stone-400 rounded-full">Completed</span>
+                    )}
+                  </div>
                   <p className="text-stone-400 mb-4">{trip.destination}</p>
 
                   {/* Trip Details */}
@@ -310,8 +420,60 @@ export default function Overview() {
                 </div>
               </div>
             ))}
+            </div>
+          )}
+        </div>
+
+        {/* Discover New Locations Section */}
+        <div className="mb-12">
+          <div className="mb-8">
+            <h2 className="text-4xl font-bold text-stone-100 mb-2">Discover New Locations</h2>
+            <p className="text-stone-400">Explore popular destinations around the world</p>
           </div>
-        )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {popularDestinations.map((destination) => (
+              <Link
+                key={destination.name}
+                href={`/plan?location=${encodeURIComponent(destination.name)}`}
+                className="group relative overflow-hidden rounded-xl border border-stone-800 hover:border-orange-400 transition-all duration-300 cursor-pointer"
+              >
+                {/* Destination Image */}
+                <div className="relative h-64 overflow-hidden">
+                  <img
+                    src={destination.imageUrl}
+                    alt={destination.name}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                  
+                  {/* Destination Info */}
+                  <div className="absolute bottom-0 left-0 right-0 p-6">
+                    <h3 className="text-2xl font-bold text-white mb-1 group-hover:text-orange-400 transition-colors">
+                      {destination.name}
+                    </h3>
+                    <p className="text-stone-300 text-sm flex items-center">
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {destination.country}
+                    </p>
+                  </div>
+
+                  {/* Hover Overlay */}
+                  <div className="absolute inset-0 bg-orange-500/0 group-hover:bg-orange-500/10 transition-all duration-300 flex items-center justify-center">
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/90 rounded-full p-3">
+                      <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

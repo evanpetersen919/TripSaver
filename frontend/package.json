@@ -19,6 +19,7 @@
     "next": "^16.0.10",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "react-globe.gl": "^2.37.0",
     "react-leaflet": "^5.0.0"
   },
   "devDependencies": {

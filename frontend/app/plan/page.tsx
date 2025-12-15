@@ -17,13 +17,30 @@ function PlanTripForm() {
   const [selectedLng, setSelectedLng] = useState("139.6503");
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Handle OAuth callback token
+  // Handle OAuth callback token and pre-fill destination
   useEffect(() => {
     const token = searchParams.get('token');
     if (token) {
       localStorage.setItem('token', token);
       // Clean URL
       window.history.replaceState({}, '', '/plan');
+    }
+
+    // Pre-fill destination from query parameter
+    const location = searchParams.get('location');
+    if (location) {
+      setDestination(location);
+      // Trigger search for the location
+      fetch(`/api/landmarks/search?q=${encodeURIComponent(location)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.results && data.results.length > 0) {
+            const firstResult = data.results[0];
+            setSelectedLat(firstResult.geometry.location.lat.toString());
+            setSelectedLng(firstResult.geometry.location.lng.toString());
+          }
+        })
+        .catch(err => console.error('Error fetching location:', err));
     }
   }, [searchParams]);
 
