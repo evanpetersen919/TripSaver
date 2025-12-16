@@ -196,5 +196,5 @@ export const DESTINATION_IMAGES: { [key: string]: string } = {
   'bogota': 'https://images.unsplash.com/photo-1568632234157-ce7aecd03d0d?w=800&h=600&fit=crop',
 };
 
-// Generic fallback for destinations not in the list
-export const DEFAULT_DESTINATION_IMAGE = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&h=600&fit=crop';
+// Generic fallback for destinations not in the list - solid black placeholder
+export const DEFAULT_DESTINATION_IMAGE = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect width="800" height="600" fill="%23000000"/%3E%3C/svg%3E';
