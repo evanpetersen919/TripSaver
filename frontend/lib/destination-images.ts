@@ -178,7 +178,6 @@ export const DESTINATION_IMAGES: { [key: string]: string } = {
   'orlando': 'https://images.unsplash.com/photo-1605723517503-3cadb5818a0c?w=800&h=600&fit=crop',
   'boston': 'https://images.unsplash.com/photo-1492566100989-0c5fc0d5e1e8?w=800&h=600&fit=crop',
   'chicago': 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&h=600&fit=crop',
-  'utah': 'https://images.unsplash.com/photo-1531120364925-6c2cda518cef?w=800&h=600&fit=crop',
   'seattle': 'https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?w=800&h=600&fit=crop',
   'toronto': 'https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&h=600&fit=crop',
   'vancouver': 'https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=800&h=600&fit=crop',
