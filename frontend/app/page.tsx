@@ -148,14 +148,19 @@ export default function Home() {
             <div className="absolute inset-0 bg-gradient-to-r from-orange-500 via-red-600 to-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           </button>
           
-          {/* Demo Video Placeholder */}
-          <div className="relative rounded-2xl shadow-2xl aspect-video max-w-5xl mx-auto overflow-hidden border border-stone-700 border-opacity-50 bg-black bg-opacity-30 backdrop-blur-sm hover:scale-105 hover:shadow-[0_0_50px_rgba(249,115,22,0.4)] transition-all duration-500 group cursor-pointer">
-            <div className="absolute inset-0 flex items-center justify-center z-10">
-              <div className="text-center">
-                <div className="text-6xl text-orange-400 drop-shadow-lg mb-4 group-hover:scale-125 group-hover:text-orange-300 transition-all duration-300">▶</div>
-                <p className="text-white text-lg font-light drop-shadow-lg group-hover:text-orange-300 transition-colors duration-300">Demo Video Coming Soon</p>
-              </div>
-            </div>
+          {/* Demo Video */}
+          <div className="relative rounded-2xl shadow-2xl aspect-video max-w-5xl mx-auto overflow-hidden border border-stone-700 border-opacity-50 hover:border-orange-400 hover:shadow-[0_0_50px_rgba(249,115,22,0.4)] transition-all duration-500">
+            <video 
+              autoPlay 
+              muted 
+              loop
+              playsInline
+              className="w-full h-full object-cover"
+              poster="/images/video-thumbnail.jpg"
+            >
+              <source src="/videos/demo.mp4#t=15" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
           </div>
 
           {/* Features Section */}
