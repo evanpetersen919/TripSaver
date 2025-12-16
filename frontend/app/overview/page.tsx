@@ -423,12 +423,13 @@ function OverviewContent() {
                 className="bg-zinc-900/50 backdrop-blur-sm rounded-xl border border-stone-800 hover:border-orange-400/50 transition-all duration-300 overflow-hidden group"
               >
                 {/* Trip Image */}
-                <div className="relative h-48 overflow-hidden">
+                <div className="relative h-48 overflow-hidden bg-black">
                   <Image
                     src={DESTINATION_IMAGES[trip.destination.toLowerCase()] || destinationImageCache[trip.destination] || trip.imageUrl || DEFAULT_DESTINATION_IMAGE}
                     alt={trip.destination}
                     fill
                     className="object-cover group-hover:scale-110 transition-transform duration-500"
+                    placeholder="empty"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/40 to-transparent"></div>
                 </div>
