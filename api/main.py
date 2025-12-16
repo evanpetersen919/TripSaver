@@ -122,10 +122,12 @@ def get_landmark_detector():
     HF_SPACE_URL = "https://evanpetersen919-cv-location-classifier.hf.space/predict"
     
     # Load landmark name mapping (works both locally and in Lambda)
-    mapping_path = Path(__file__).parent / "data" / "checkpoints" / "landmark_names_500classes.json"
+    mapping_path = Path(__file__).parent / "landmark_names_500classes.json"
     if not mapping_path.exists():
-        # Fallback for local development
-        mapping_path = Path(__file__).parent.parent / "data" / "checkpoints" / "landmark_names_500classes.json"
+        # Fallback paths
+        mapping_path = Path(__file__).parent / "data" / "checkpoints" / "landmark_names_500classes.json"
+        if not mapping_path.exists():
+            mapping_path = Path(__file__).parent.parent / "data" / "checkpoints" / "landmark_names_500classes.json"
     with open(mapping_path, 'r', encoding='utf-8') as f:
         name_mapping = json.load(f)
     idx_to_name = name_mapping['idx_to_name']
