@@ -470,21 +470,24 @@ export default function Dashboard() {
       const result = await response.json();
       console.log('Fallback result:', result);
       
-      // Process top recommendation
-      if (result.recommendations && result.recommendations.length > 0) {
-        const topRec = result.recommendations[0];
+      // Process vision description (may or may not have recommendations)
+      const hasVisionDescription = result.vision_description && result.vision_description.length > 0;
+      const hasRecommendations = result.recommendations && result.recommendations.length > 0;
+      
+      if (hasVisionDescription || hasRecommendations) {
+        const topRec = hasRecommendations ? result.recommendations[0] : null;
         console.log('Top recommendation:', topRec);
         
         // Show confirmation modal with AI analysis
         // Prioritize vision_description (Groq analyzed the actual image) over topRec.description (database description)
-        const descriptionSource = result.vision_description || topRec.description || 'No description available';
+        const descriptionSource = result.vision_description || (topRec?.description) || 'No description available';
         // Strip markdown formatting (** **) from description
         const cleanDescription = descriptionSource
           .replace(/\*\*(.*?)\*\*/g, '$1')  // Remove **bold** markers
           .replace(/\*(.*?)\*/g, '$1');      // Remove *italic* markers
         
         // Extract landmark name from Groq vision description if available
-        let landmarkName = topRec.name;
+        let landmarkName = topRec?.name || 'Unknown Landmark';
         if (result.vision_description) {
           // Try to extract landmark name from first sentence (e.g., "The landmark in the image is the Itsukushima Shrine")
           const nameMatch = result.vision_description.match(/(?:landmark in the image is|This is|famous|iconic)\s+(?:the\s+)?([^,\.]+(?:Shrine|Temple|Tower|Palace|Castle|Gate|Bridge|Monument|Building|Cathedral|Mosque|Church|Fort|Wall|Statue|Garden|Park|Falls|Mountain|Volcano|Island)[^,\.]*)/i);
@@ -499,8 +502,8 @@ export default function Dashboard() {
         console.log('Place data for Groq-identified landmark', landmarkName, ':', placeData);
         
         // Use coordinates from Groq-identified place, fallback to CLIP recommendation, then fallback coords
-        const latitude = placeData.location?.latitude || topRec.latitude || (destinationLat + Math.random() * 0.1 - 0.05);
-        const longitude = placeData.location?.longitude || topRec.longitude || (destinationLng + Math.random() * 0.1 - 0.05);
+        const latitude = placeData.location?.latitude || topRec?.latitude || (destinationLat + Math.random() * 0.1 - 0.05);
+        const longitude = placeData.location?.longitude || topRec?.longitude || (destinationLng + Math.random() * 0.1 - 0.05);
         
         const imageUrl = placeData.photos && placeData.photos.length > 0 ? placeData.photos[0].url : '';
         
@@ -515,12 +518,12 @@ export default function Dashboard() {
           image: imageUrl,
           latitude,
           longitude,
-          confidence: topRec.final_score || topRec.text_similarity || 0.85
+          confidence: topRec?.final_score || topRec?.text_similarity || 0.75
         });
       } else {
         setShowFallbackModal(false);
         setLoadingFallback(false);
-        alert('No recommendations found. Please try a different photo.');
+        alert('Unable to identify the landmark. Please try a different photo with a clearer view of the landmark.');
       }
       
     } catch (error) {
