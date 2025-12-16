@@ -522,8 +522,8 @@ export default function Dashboard() {
         console.log('Place data for Groq-identified landmark', landmarkName, ':', placeData);
         
         // Use coordinates from Groq-identified place, fallback to CLIP recommendation, then fallback coords
-        const latitude = placeData.location?.latitude || topRec?.latitude || (destinationLat + Math.random() * 0.1 - 0.05);
-        const longitude = placeData.location?.longitude || topRec?.longitude || (destinationLng + Math.random() * 0.1 - 0.05);
+        const latitude = placeData.location?.latitude || topRec?.latitude || ((destinationLat || 0) + Math.random() * 0.1 - 0.05);
+        const longitude = placeData.location?.longitude || topRec?.longitude || ((destinationLng || 0) + Math.random() * 0.1 - 0.05);
         
         const imageUrl = placeData.photos && placeData.photos.length > 0 ? placeData.photos[0].url : '';
         
