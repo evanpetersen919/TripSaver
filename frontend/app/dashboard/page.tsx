@@ -432,8 +432,8 @@ export default function Dashboard() {
     if (!predictionModal) return;
     
     // Use Google Places location first, then prediction coords, then fallback
-    let lat = destinationLat + Math.random() * 0.1 - 0.05;
-    let lng = destinationLng + Math.random() * 0.1 - 0.05;
+    let lat = (destinationLat || 0) + Math.random() * 0.1 - 0.05;
+    let lng = (destinationLng || 0) + Math.random() * 0.1 - 0.05;
     
     if (prediction.googleLocation) {
       lat = prediction.googleLocation.latitude;
