@@ -154,7 +154,6 @@ export const DESTINATION_IMAGES: { [key: string]: string } = {
   'cappadocia': 'https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?w=800&h=600&fit=crop',
   'moscow': 'https://images.unsplash.com/photo-1513326738677-b964603b136d?w=800&h=600&fit=crop',
   'st petersburg': 'https://images.unsplash.com/photo-1581888227599-779811939961?w=800&h=600&fit=crop',
-  'dubai': 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=800&h=600&fit=crop',
   'abu dhabi': 'https://images.unsplash.com/photo-1512632578888-169bbbc64f33?w=800&h=600&fit=crop',
   'jerusalem': 'https://images.unsplash.com/photo-1544483810-9b3da0739e6f?w=800&h=600&fit=crop',
   'tel aviv': 'https://images.unsplash.com/photo-1590856029620-23a3c5a6c4f5?w=800&h=600&fit=crop',
