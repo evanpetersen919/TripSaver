@@ -67,6 +67,8 @@ interface MapComponentProps {
   recommendations?: Recommendation[];
   onClearRecommendations?: () => void;
   onRemoveRecommendation?: (name: string) => void;
+  destinationLat?: number;
+  destinationLng?: number;
 }
 
 // 50 distinct colors for different days
@@ -263,10 +265,12 @@ const AIRecommendationMarker = ({ rank, isSelected, image, onRemove }: { rank: n
   </div>
 );
 
-export default function MapComponent({ landmarks, selectedLandmark, onAddToItinerary, recommendations = [], onClearRecommendations, onRemoveRecommendation }: MapComponentProps) {
+export default function MapComponent({ landmarks, selectedLandmark, onAddToItinerary, recommendations = [], onClearRecommendations, onRemoveRecommendation, destinationLat, destinationLng }: MapComponentProps) {
   const center = landmarks.length > 0 
     ? { lat: landmarks[0].lat, lng: landmarks[0].lng }
-    : { lat: 35.6762, lng: 139.6503 };
+    : (destinationLat !== undefined && destinationLng !== undefined)
+    ? { lat: destinationLat, lng: destinationLng }
+    : { lat: 0, lng: 0 };
 
   const [openInfoWindowId, setOpenInfoWindowId] = useState<string | null>(null);
   const [showMoreInfo, setShowMoreInfo] = useState<string | null>(null);
@@ -370,6 +374,14 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
     }
   }, [selectedLandmark, map]);
 
+  // Pan to destination center when coordinates change (for new trips)
+  useEffect(() => {
+    if (map && landmarks.length === 0 && destinationLat && destinationLng) {
+      map.panTo({ lat: destinationLat, lng: destinationLng });
+      map.setZoom(12);
+    }
+  }, [destinationLat, destinationLng, map, landmarks.length]);
+
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   // Handle POI (Place of Interest) clicks
@@ -431,8 +443,8 @@ export default function MapComponent({ landmarks, selectedLandmark, onAddToItine
     <APIProvider apiKey={apiKey} language="en">
       <Map
         defaultCenter={center}
-        defaultZoom={12}
-        minZoom={3}
+        defaultZoom={2}
+        minZoom={2}
         restriction={{
           latLngBounds: {
             north: 85,

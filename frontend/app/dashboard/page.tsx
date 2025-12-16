@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import ModernSearchSuggestions from "@/components/ModernSearchSuggestions";
+import { DESTINATION_IMAGES, DEFAULT_DESTINATION_IMAGE } from "@/lib/destination-images";
 
 // Add keyframe animation for rotating border gradient
 const borderAnimationStyles = `
@@ -60,21 +61,6 @@ const dayColors = [
   '#86efac', '#c4b5fd', '#fca5a5', '#fde68a', '#7dd3fc'
 ];
 
-const DESTINATION_IMAGES: { [key: string]: string } = {
-  'japan': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
-  'france': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
-  'italy': 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&q=80',
-  'spain': 'https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=800&q=80',
-  'united kingdom': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80',
-  'greece': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800&q=80',
-  'thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&q=80',
-  'australia': 'https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=800&q=80',
-  'california': 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80',
-  'hawaii': 'https://images.unsplash.com/photo-1542259009477-d625272157b7?w=800&q=80',
-  'iceland': 'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&q=80',
-  'new zealand': 'https://images.unsplash.com/photo-1507699622108-4be3abd695ad?w=800&q=80',
-};
-
 const COUNTRY_LANDMARKS: { [key: string]: string[] } = {
   'japan': ['tokyo tower', 'tokyo skytree'],
   'france': ['eiffel tower', 'louvre'],
@@ -123,8 +109,8 @@ export default function Dashboard() {
   const [tripName, setTripName] = useState('My Trip');
   const [destination, setDestination] = useState('');
   const [destinationImage, setDestinationImage] = useState('');
-  const [destinationLat, setDestinationLat] = useState(35.6762);
-  const [destinationLng, setDestinationLng] = useState(139.6503);
+  const [destinationLat, setDestinationLat] = useState<number | undefined>(undefined);
+  const [destinationLng, setDestinationLng] = useState<number | undefined>(undefined);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [isEditingDates, setIsEditingDates] = useState(false);
@@ -226,6 +212,13 @@ export default function Dashboard() {
               const destLower = trip.destination.toLowerCase();
               if (DESTINATION_IMAGES[destLower]) {
                 setDestinationImage(DESTINATION_IMAGES[destLower]);
+              } else {
+                // Fetch image from Google Places API if not in hardcoded list
+                fetchPlacePhotos(trip.destination).then(photoData => {
+                  if (photoData.photos && photoData.photos.length > 0) {
+                    setDestinationImage(photoData.photos[1]?.url || photoData.photos[0].url);
+                  }
+                });
               }
             }
             
@@ -243,6 +236,25 @@ export default function Dashboard() {
               }));
               setLocations(loadedLocations);
               console.log('[Dashboard] Loaded locations:', loadedLocations.length);
+              
+              // Set map center to first location if available
+              if (loadedLocations.length > 0) {
+                setDestinationLat(loadedLocations[0].lat);
+                setDestinationLng(loadedLocations[0].lng);
+              }
+            } else if (trip.destination) {
+              // No locations yet, fetch coordinates for destination
+              fetch('/api/landmarks/google-search?q=' + encodeURIComponent(trip.destination))
+                .then(res => res.json())
+                .then(data => {
+                  if (data.landmarks && data.landmarks.length > 0) {
+                    setDestinationLat(data.landmarks[0].latitude);
+                    setDestinationLng(data.landmarks[0].longitude);
+                  }
+                })
+                .catch(err => {
+                  console.error('Error fetching destination coords:', err);
+                });
             }
           } else {
             const errorText = await response.text();
@@ -266,19 +278,27 @@ export default function Dashboard() {
       if (name) setTripName(name);
       if (start) setStartDate(start);
       if (end) setEndDate(end);
-      if (lat && lat !== 'undefined') {
-        const parsedLat = parseFloat(lat);
-        if (!isNaN(parsedLat)) setDestinationLat(parsedLat);
-      }
-      if (lng && lng !== 'undefined') {
-        const parsedLng = parseFloat(lng);
-        if (!isNaN(parsedLng)) setDestinationLng(parsedLng);
-      }
+      // Don't set coordinates from URL params - let map default to (0,0) world view
+      // if (lat && lat !== 'undefined') {
+      //   const parsedLat = parseFloat(lat);
+      //   if (!isNaN(parsedLat)) setDestinationLat(parsedLat);
+      // }
+      // if (lng && lng !== 'undefined') {
+      //   const parsedLng = parseFloat(lng);
+      //   if (!isNaN(parsedLng)) setDestinationLng(parsedLng);
+      // }
 
       if (dest) {
         const destLower = dest.toLowerCase();
         if (DESTINATION_IMAGES[destLower]) {
           setDestinationImage(DESTINATION_IMAGES[destLower]);
+        } else {
+          // Fetch image from Google Places API if not in hardcoded list
+          fetchPlacePhotos(dest).then(photoData => {
+            if (photoData.photos && photoData.photos.length > 0) {
+              setDestinationImage(photoData.photos[1]?.url || photoData.photos[0].url);
+            }
+          });
         }
       }
     }
@@ -1170,6 +1190,12 @@ export default function Dashboard() {
     const destLower = dest.toLowerCase();
     if (DESTINATION_IMAGES[destLower]) {
       setDestinationImage(DESTINATION_IMAGES[destLower]);
+    } else {
+      // Fetch image from Google Places API if not in hardcoded list
+      const photoData = await fetchPlacePhotos(dest);
+      if (photoData.photos && photoData.photos.length > 0) {
+        setDestinationImage(photoData.photos[1]?.url || photoData.photos[0].url);
+      }
     }
   };
 
@@ -1361,6 +1387,8 @@ export default function Dashboard() {
             recommendations={recommendations}
             onClearRecommendations={handleClearRecommendations}
             onRemoveRecommendation={handleRemoveRecommendation}
+            destinationLat={destinationLat}
+            destinationLng={destinationLng}
           />
         </div>
 
@@ -1386,19 +1414,18 @@ export default function Dashboard() {
 
           <div className={`transition-opacity duration-300 flex flex-col h-full ${sidebarCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           {(destination || tripName) && (
-            <div className="relative h-48 border-b border-zinc-800 border-opacity-50 overflow-hidden rounded-t-3xl">
-              {destinationImage ? (
+            <div className="relative h-48 border-b border-zinc-800 border-opacity-50 overflow-hidden rounded-t-3xl bg-gradient-to-br from-orange-900/20 to-purple-900/20">
+              {destinationImage && (
                 <div className="absolute inset-0 w-full h-full">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img 
                     src={destinationImage} 
                     alt={destination || 'Trip destination'}
                     className="absolute inset-0 w-full h-full object-cover"
+                    loading="eager"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
                 </div>
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-orange-900/20 to-purple-900/20"></div>
               )}
               <div className="absolute bottom-4 left-5 right-5">
                 <h1 className="text-2xl font-bold text-white mb-1 drop-shadow-2xl tracking-tight">{tripName}</h1>

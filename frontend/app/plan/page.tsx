@@ -13,8 +13,8 @@ function PlanTripForm() {
   const [endDate, setEndDate] = useState("");
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedLat, setSelectedLat] = useState("35.6762");
-  const [selectedLng, setSelectedLng] = useState("139.6503");
+  const [selectedLat, setSelectedLat] = useState("0");
+  const [selectedLng, setSelectedLng] = useState("0");
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle OAuth callback token and pre-fill destination
@@ -29,15 +29,20 @@ function PlanTripForm() {
     // Pre-fill destination from query parameter
     const location = searchParams.get('location');
     if (location) {
+      console.log('Pre-filling destination:', location);
       setDestination(location);
       // Trigger search for the location
       fetch(`/api/landmarks/search?q=${encodeURIComponent(location)}`)
         .then(res => res.json())
         .then(data => {
-          if (data.results && data.results.length > 0) {
-            const firstResult = data.results[0];
-            setSelectedLat(firstResult.geometry.location.lat.toString());
-            setSelectedLng(firstResult.geometry.location.lng.toString());
+          console.log('Search API response:', data);
+          if (data.landmarks && data.landmarks.length > 0) {
+            const firstResult = data.landmarks[0];
+            console.log('Setting coordinates from search:', firstResult.latitude, firstResult.longitude);
+            setSelectedLat(firstResult.latitude?.toString() || "0");
+            setSelectedLng(firstResult.longitude?.toString() || "0");
+          } else {
+            console.log('No landmarks found in response');
           }
         })
         .catch(err => console.error('Error fetching location:', err));
@@ -87,14 +92,16 @@ function PlanTripForm() {
 
   const selectSuggestion = (suggestion: any) => {
     setDestination(suggestion.name);
-    setSelectedLat(suggestion.lat);
-    setSelectedLng(suggestion.lng);
+    setSelectedLat(suggestion.latitude?.toString() || suggestion.lat?.toString() || "0");
+    setSelectedLng(suggestion.longitude?.toString() || suggestion.lng?.toString() || "0");
     setSuggestions([]);
     setShowSuggestions(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    console.log('Plan page submitting with coordinates:', { selectedLat, selectedLng, destination });
     
     const params = new URLSearchParams({
       name: tripName,
