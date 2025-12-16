@@ -694,8 +694,8 @@ export default function Dashboard() {
   const handleAddPlace = async (day: number, placeName: string, insertAfterIndex?: number) => {
     if (!placeName.trim()) return;
     
-    let lat = destinationLat + (Math.random() - 0.5) * 0.1;
-    let lng = destinationLng + (Math.random() - 0.5) * 0.1;
+    let lat = (destinationLat || 0) + (Math.random() - 0.5) * 0.1;
+    let lng = (destinationLng || 0) + (Math.random() - 0.5) * 0.1;
     let imageUrl = '';
     
     try {
@@ -901,8 +901,8 @@ export default function Dashboard() {
       
       // If we have existing locations, use their average center point
       // Otherwise use destination coordinates
-      let searchLat = destinationLat;
-      let searchLng = destinationLng;
+      let searchLat = destinationLat || 0;
+      let searchLng = destinationLng || 0;
       
       if (locations.length > 0) {
         searchLat = locations.reduce((sum, loc) => sum + loc.lat, 0) / locations.length;
