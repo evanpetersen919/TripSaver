@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { DESTINATION_IMAGES, DEFAULT_DESTINATION_IMAGE } from "@/lib/destination-images";
 
 interface Trip {
   id: string;
@@ -36,39 +37,59 @@ function OverviewContent() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"recent" | "name" | "date">("recent");
+  const [destinationImageCache, setDestinationImageCache] = useState<{ [key: string]: string }>({});
   const [popularDestinations, setPopularDestinations] = useState<PopularDestination[]>([
-    { name: "Japan", country: "Asia", imageUrl: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&h=600&fit=crop" },
-    { name: "France", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&h=600&fit=crop" },
-    { name: "Italy", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&h=600&fit=crop" },
-    { name: "USA", country: "North America", imageUrl: "https://images.unsplash.com/photo-1485738422979-f5c462d49f74?w=800&h=600&fit=crop" },
-    { name: "Spain", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800&h=600&fit=crop" },
-    { name: "Greece", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&h=600&fit=crop" },
-    { name: "Thailand", country: "Asia", imageUrl: "https://images.unsplash.com/photo-1519451241324-20b4ea2c4220?w=800&h=600&fit=crop" },
-    { name: "Australia", country: "Oceania", imageUrl: "https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=800&h=600&fit=crop" },
-    { name: "United Kingdom", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&h=600&fit=crop" },
-    { name: "Canada", country: "North America", imageUrl: "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=800&h=600&fit=crop" },
-    { name: "Germany", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&h=600&fit=crop" },
-    { name: "Iceland", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&h=600&fit=crop" },
+    { name: "Japan", country: "Asia", imageUrl: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=800&h=600&fit=crop" },
+    { name: "France", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?w=800&h=600&fit=crop" },
+    { name: "Italy", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1520175480921-4edfa2983e0f?w=800&h=600&fit=crop" },
+    { name: "USA", country: "North America", imageUrl: "https://images.unsplash.com/photo-1518391846015-55a9cc003b25?w=800&h=600&fit=crop" },
+    { name: "Spain", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1562883676-8c7feb83f09b?w=800&h=600&fit=crop" },
+    { name: "Greece", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1555993539-1732b0258235?w=800&h=600&fit=crop" },
+    { name: "Thailand", country: "Asia", imageUrl: "https://images.unsplash.com/photo-1537956965359-7573183d1f57?w=800&h=600&fit=crop" },
+    { name: "Australia", country: "Oceania", imageUrl: "https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=800&h=600&fit=crop" },
+    { name: "United Kingdom", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1486299267070-83823f5448dd?w=800&h=600&fit=crop" },
+    { name: "Canada", country: "North America", imageUrl: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&h=600&fit=crop" },
+    { name: "Germany", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=800&h=600&fit=crop" },
+    { name: "Iceland", country: "Europe", imageUrl: "https://images.unsplash.com/photo-1531168556467-80aace0d0144?w=800&h=600&fit=crop" },
   ]);
 
-  // Get image for destination (different from country cards)
-  const getDestinationImage = (destination: string): string => {
-    const imageMap: { [key: string]: string } = {
-      'Japan': 'https://images.unsplash.com/photo-1480796927426-f609979314bd?w=800&h=500&fit=crop',
-      'France': 'https://images.unsplash.com/photo-1431274172761-fca41d930114?w=800&h=500&fit=crop',
-      'Italy': 'https://images.unsplash.com/photo-1498307833015-e7b400441eb8?w=800&h=500&fit=crop',
-      'USA': 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&h=500&fit=crop',
-      'Spain': 'https://images.unsplash.com/photo-1558642084-fd07fae5282e?w=800&h=500&fit=crop',
-      'Greece': 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800&h=500&fit=crop',
-      'Thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&h=500&fit=crop',
-      'Australia': 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=800&h=500&fit=crop',
-      'United Kingdom': 'https://images.unsplash.com/photo-1486299267070-83823f5448dd?w=800&h=500&fit=crop',
-      'Canada': 'https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&h=500&fit=crop',
-      'Germany': 'https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=800&h=500&fit=crop',
-      'Iceland': 'https://images.unsplash.com/photo-1531168556467-80aace0d0144?w=800&h=500&fit=crop',
-    };
-    // Return specific image or generic travel image
-    return imageMap[destination] || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&h=500&fit=crop';
+  // Fetch place photos from Google Places API
+  const fetchPlacePhotos = async (placeName: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`/api/landmarks/place-details?name=${encodeURIComponent(placeName)}`);
+      const data = await response.json();
+      if (data.photos && data.photos.length > 0) {
+        return data.photos[1]?.url || data.photos[0].url;
+      }
+    } catch (error) {
+      console.error('Error fetching place photos:', error);
+    }
+    return null;
+  };
+
+  // Get image for destination with Google Places API fallback
+  const getDestinationImage = async (destination: string): Promise<string> => {
+    // Check cache first
+    if (destinationImageCache[destination]) {
+      return destinationImageCache[destination];
+    }
+
+    // Check hardcoded images (same as dashboard)
+    const destLower = destination.toLowerCase();
+    if (DESTINATION_IMAGES[destLower]) {
+      return DESTINATION_IMAGES[destLower];
+    }
+
+    // Try Google Places API as fallback
+    const photoUrl = await fetchPlacePhotos(destination);
+    if (photoUrl) {
+      // Update cache
+      setDestinationImageCache(prev => ({ ...prev, [destination]: photoUrl }));
+      return photoUrl;
+    }
+
+    // Ultimate fallback
+    return DEFAULT_DESTINATION_IMAGE;
   };
 
   // Filter and sort trips
@@ -160,7 +181,16 @@ function OverviewContent() {
 
       if (response.ok) {
         const data = await response.json();
-        setTrips(data.trips || []);
+        const tripsData = data.trips || [];
+        setTrips(tripsData);
+        
+        // Load images for trips that don't have them
+        tripsData.forEach(async (trip: Trip) => {
+          if (!trip.imageUrl && !destinationImageCache[trip.destination]) {
+            const imageUrl = await getDestinationImage(trip.destination);
+            setDestinationImageCache(prev => ({ ...prev, [trip.destination]: imageUrl }));
+          }
+        });
       }
     } catch (error) {
       console.error("Error fetching trips:", error);
@@ -395,7 +425,7 @@ function OverviewContent() {
                 {/* Trip Image */}
                 <div className="relative h-48 overflow-hidden">
                   <Image
-                    src={trip.imageUrl || getDestinationImage(trip.destination)}
+                    src={DESTINATION_IMAGES[trip.destination.toLowerCase()] || destinationImageCache[trip.destination] || trip.imageUrl || DEFAULT_DESTINATION_IMAGE}
                     alt={trip.destination}
                     fill
                     className="object-cover group-hover:scale-110 transition-transform duration-500"
