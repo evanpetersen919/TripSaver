@@ -1042,15 +1042,20 @@ async def fallback_analysis(
         vision_description = groq_response.json()['choices'][0]['message']['content']
         
         # 3. Get semantic recommendations
-        engine = get_recommendation_engine()
-        clip_embedding_np = np.array(clip_embedding, dtype=np.float32)
-        
-        recs = engine.search_by_description(
-            vision_description=vision_description,
-            clip_embedding=clip_embedding_np,
-            top_k=10,
-            min_similarity=0.3
-        )
+        try:
+            engine = get_recommendation_engine()
+            clip_embedding_np = np.array(clip_embedding, dtype=np.float32)
+            
+            recs = engine.search_by_description(
+                vision_description=vision_description,
+                clip_embedding=clip_embedding_np,
+                top_k=10,
+                min_similarity=0.1  # Lower threshold to get more results
+            )
+        except Exception as rec_error:
+            print(f"Recommendation engine failed: {rec_error}")
+            # Return vision description even if recommendations fail
+            recs = []
         
         # 4. Update DynamoDB record
         table.update_item(
@@ -1070,7 +1075,8 @@ async def fallback_analysis(
             vision_description=vision_description,
             clip_embedding_dim=clip_dim,
             recommendations=recs,
-            search_mode='semantic'
+            search_mode='semantic',
+            message="Vision analysis completed successfully" if recs else "Vision analysis completed but semantic search unavailable. The landmark has been identified."
         )
         
     except HTTPException:
