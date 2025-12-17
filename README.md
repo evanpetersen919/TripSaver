@@ -78,8 +78,11 @@ cv_pipeline/
 ├── data/                     # Trained models & databases
 │   ├── checkpoints/         # EfficientNet weights
 │   └── landmarks_unified.json # 50K+ landmark database
+├── frontend/                # Next.js web application
+│   ├── app/                 # Pages and routes
+│   ├── components/          # React components
+│   └── lib/                 # Utilities and API client
 ├── template.yaml            # AWS SAM Infrastructure as Code
-├── samconfig.toml           # SAM deployment config
 ├── .env.example             # Environment variables template
 ├── DEPLOYMENT.md            # Step-by-step deployment guide
 └── requirements.txt         # Python dependencies
