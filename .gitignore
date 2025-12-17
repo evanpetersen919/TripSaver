@@ -66,3 +66,17 @@ __pycache__/
 layers/
 .aws-sam/
 samconfig.toml
+
+# Build artifacts and logs
+*.log
+build.log
+amplify-error.log
+job*.log
+
+# Test files
+test_temp*.jpg
+test_landmark.jpg
+
+# Old/unused folders
+front_end/
+cv-location-frontend/
