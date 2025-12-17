@@ -2973,14 +2973,15 @@ export default function Dashboard() {
       {/* Fallback Confirmation Modal */}
       {fallbackConfirmModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[10001] p-4">
-          <div className="bg-gradient-to-br from-zinc-900 to-black border border-purple-700/50 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-900/30 to-purple-800/20 border-b border-purple-700/30 px-6 py-4">
+          <div className="bg-gradient-to-br from-zinc-900 to-black border border-purple-700/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header - Fixed */}
+            <div className="bg-gradient-to-r from-purple-900/30 to-purple-800/20 border-b border-purple-700/30 px-6 py-4 flex-shrink-0">
               <h2 className="text-2xl font-bold text-stone-100">AI Analysis Result</h2>
               <p className="text-purple-300 text-sm mt-1">Confirm if this matches your photo</p>
             </div>
 
-            <div className="p-6 space-y-6">
+            {/* Scrollable Content */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               {/* Landmark Name */}
               <div className="text-center">
                 <h3 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent">
@@ -3054,21 +3055,22 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleRejectFallbackLocation}
-                  className="flex-1 bg-zinc-800/50 hover:bg-zinc-800 border border-stone-700 hover:border-red-500/50 text-stone-300 hover:text-red-400 font-semibold py-4 px-6 rounded-xl transition-all duration-200"
-                >
-                  No, This Isn't Right
-                </button>
-                <button
-                  onClick={handleConfirmFallbackLocation}
-                  className="flex-1 bg-zinc-800/50 hover:bg-zinc-800 border-2 border-purple-500 hover:border-purple-400 text-purple-300 hover:text-purple-200 font-semibold py-4 px-6 rounded-xl transition-all duration-200"
-                >
-                  Yes, Add to Itinerary
-                </button>
-              </div>
+            </div>
+
+            {/* Buttons - Fixed at bottom */}
+            <div className="flex gap-3 p-6 pt-4 border-t border-purple-700/30 bg-gradient-to-r from-purple-900/10 to-purple-800/5 flex-shrink-0">
+              <button
+                onClick={handleRejectFallbackLocation}
+                className="flex-1 bg-zinc-800/50 hover:bg-zinc-800 border border-stone-700 hover:border-red-500/50 text-stone-300 hover:text-red-400 font-semibold py-4 px-6 rounded-xl transition-all duration-200"
+              >
+                No, This Isn't Right
+              </button>
+              <button
+                onClick={handleConfirmFallbackLocation}
+                className="flex-1 bg-zinc-800/50 hover:bg-zinc-800 border-2 border-purple-500 hover:border-purple-400 text-purple-300 hover:text-purple-200 font-semibold py-4 px-6 rounded-xl transition-all duration-200"
+              >
+                Yes, Add to Itinerary
+              </button>
             </div>
           </div>
         </div>
