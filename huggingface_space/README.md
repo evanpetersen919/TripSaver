@@ -1,75 +1,62 @@
 ---
-title: CV Location Classifier
+title: TripSaver Landmark Detector
 emoji: 🗺️
-colorFrom: blue
-colorTo: green
+colorFrom: orange
+colorTo: red
 sdk: gradio
 sdk_version: 4.44.0
 app_file: app.py
 pinned: false
-license: mit
 ---
 
-# 🗺️ CV Location Classifier - Multi-Model Vision Pipeline
+# 🗺️ TripSaver - AI Landmark Recognition
 
-**Two powerful AI models on HuggingFace Space:** EfficientNet-B3 and CLIP ViT-B/32 (vision analysis powered by Groq API)
+**EfficientNet-B3 trained on 500 landmark classes** | Part of the TripSaver full-stack AI platform
 
 ## 🚀 Features
 
-- **Fast inference**: ~200ms on GPU (T4 free tier)
-- **High accuracy**: 81.37% on 500 landmark classes
-- **API-ready**: Call via Gradio API or HTTP requests
-- **Free hosting**: Runs on Hugging Face Spaces forever
+- **Fast inference**: ~200ms on CPU (HuggingFace Spaces)
+- **Trained on custom hardware**: RTX 4080, 20 hours of training
+- **Social media ready**: Robust to Instagram/TikTok overlays and filters
+- **API-ready**: Integrate with REST API calls
+- **Free hosting**: Runs on HuggingFace Spaces
 
-## 📡 API Usage
+## 🎯 Model Details
 
-```python
-import requests
-from PIL import Image
-import io
+### Architecture
+- **Model**: EfficientNet-B3
+- **Dataset**: Google Landmarks Dataset v2 (500 classes)
+- **Input size**: 300x300 RGB images
+- **Output**: Top-5 predictions with confidence scores
 
-# API endpoint
-API_URL = "https://YOUR-USERNAME-landmark-detector.hf.space/api/predict"
+### Training
+- **Hardware**: RTX 4080 16GB, i9-13900K, 64GB DDR5
+- **Duration**: ~20 hours
+- **Transfer learning**: ImageNet pretrained weights
+- **Augmentation**: RandAugment, MixUp, CutMix
+- **Custom augmentation**: Instagram/TikTok UI overlays (30% probability)
+- **Optimizer**: AdamW with cosine annealing
+- **Precision**: Mixed FP16 for faster training
 
-# Upload image
-with open("landmark.jpg", "rb") as f:
-    response = requests.post(API_URL, files={"data": f})
+### Preprocessing
+- Template matching removes social media UI elements
+- Resize(320) → CenterCrop(300) → ImageNet normalization
 
-predictions = response.json()["data"]
-print(predictions)
-```
 
-## 🔑 Response Format
 
-```json
-{
-  "success": true,
-  "predictions": [
-    {"class_id": 42, "confidence": 0.8567},
-    {"class_id": 128, "confidence": 0.0891},
-    ...
-  ],
-  "model": "EfficientNet-B3",
-  "num_classes": 500,
-  "device": "cuda"
-}
-```
+## 🌐 Full System
 
-## ℹ️ Model Details
-
-- **Architecture**: EfficientNet-B3 (132MB)
-- **Training**: 54 epochs, transfer learning from ImageNet
-- **Dataset**: 500 landmark classes
-- **Validation Accuracy**: 81.37% (top-1), ~95% (top-5)
-- **Input size**: 300x300 RGB
-- **Preprocessing**: Resize(320) → CenterCrop(300) → Normalize
+This model is part of the TripSaver platform, which includes:
+- **Two-tier detection**: EfficientNet-B3 + Google Vision API validation
+- **Visual similarity**: CLIP ViT-B/32 (4,248 landmarks)
+- **Scene understanding**: Groq Llama 4 Scout 17B
+- **Full-stack app**: Next.js frontend + AWS Lambda backend
+- **Deployment**: Vercel (frontend) + AWS (backend) + HuggingFace Spaces (model)
 
 ## 🔗 Links
 
-- **GitHub**: [CV-Location-Classifier](https://github.com/evanpetersen919/CV-Location-Classifier)
+- **GitHub**: [TripSaver](https://github.com/evanpetersen919/CV-Location-Classifier)
+- **Live App**: [TripSaver Web App](https://your-vercel-app.vercel.app)
 - **Author**: [Evan Petersen](https://www.linkedin.com/in/evan-petersen-b93037386/)
-- **License**: MIT
 
----
-
-Part of the CV Location Classifier project - AI-powered travel recommendations using landmark detection and visual similarity search.
+All Rights Reserved © 2025 Evan Petersen

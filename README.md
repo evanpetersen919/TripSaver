@@ -1,45 +1,55 @@
-# CV Location Classifier
-### AI-Powered Landmark Detection & Travel Recommendation System
+# TripSaver - AI-Powered Trip Planner
+### Full-Stack AI Platform for Global Landmark Recognition
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com/)
 [![AWS](https://img.shields.io/badge/AWS-Lambda-orange.svg)](https://aws.amazon.com/lambda/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org/)
 
-A serverless AI travel companion that identifies landmarks in photos and recommends nearby attractions. Deployed entirely on AWS Always Free Tier with zero monthly costs.
+A full-stack AI platform that transforms travel photos into landmark discoveries. Upload any image and instantly identify landmarks across 500 classes with visual similarity search spanning 4,248 unique landmarks.
 
 ## Key Features
 
-- **Landmark Detection**: EfficientNet-B3 trained on 500 landmark classes (~80% accuracy)
-- **Scene Understanding**: Groq Llama 4 Scout for fast FREE vision-language analysis
-- **Visual Similarity**: CLIP embeddings for content-based landmark search
-- **Smart Recommendations**: Finds nearby attractions based on your itinerary + image features
-- **JWT Authentication**: Secure user accounts with bcrypt password hashing
-- **DynamoDB Single-Table Design**: Efficient NoSQL data modeling with GSI indexes
-- **Serverless Architecture**: AWS Lambda + API Gateway (1M free requests/month)
-- **One-Command Deployment**: Infrastructure as Code with AWS SAM
+- **Two-Tier Detection System**: EfficientNet-B3 (500 classes) with Google Vision API validation for low-confidence results
+- **Visual Similarity Search**: CLIP ViT-B/32 embeddings with FAISS search across 4,248 landmarks
+- **Scene Understanding**: Groq Llama 4 Scout 17B for detailed scene descriptions
+- **Social Media Ready**: Custom augmentation pipeline for Instagram/TikTok overlays and filters
+- **Smart Recommendations**: Finds nearby attractions based on your itinerary and image features
+- **Full-Stack Web App**: Next.js frontend deployed on Vercel with real-time image search
+- **Serverless Architecture**: AWS Lambda + API Gateway for scalable inference
+- **Secure Authentication**: JWT with bcrypt password hashing
 
-## Architecture
+## System Architecture
 
 ```
 ┌─────────────────────┐
-│    API Gateway      │  (1M calls/month - FREE)
+│   Next.js Frontend  │  (Vercel - Auto Deploy)
+│   React 19 + Tailwind│
 └──────────┬──────────┘
            │
            ▼
 ┌─────────────────────┐
-│  Lambda Function    │  (1M requests/month - FREE)
-│   FastAPI + Models  │
+│    API Gateway      │  (AWS - REST)
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Lambda Functions   │  (FastAPI + JWT Auth)
 └──────┬──────────────┘
        │
-       ├──→ DynamoDB (25GB - FREE)
-       │    └─ Users, Itineraries, Predictions
+       ├──→ HuggingFace Space (CPU)
+       │    └─ EfficientNet-B3 (500 classes)
        │
-       ├──→ Groq API (FREE tier)
-       │    └─ Llama 4 Scout 17B vision model
+       ├──→ Google Vision API
+       │    └─ Validation (confidence < 70%)
        │
-       └──→ HuggingFace Space (FREE CPU)
-            └─ EfficientNet-B3, CLIP
+       ├──→ CLIP + Groq (Tier 2)
+       │    ├─ CLIP ViT-B/32 (4,248 embeddings)
+       │    └─ Llama 4 Scout 17B (scene understanding)
+       │
+       └──→ DynamoDB + FAISS
+            ├─ Users, Itineraries, Predictions
+            └─ 4,248 landmark vectors
 ```
 
 ## Project Structure
@@ -72,36 +82,31 @@ cv_pipeline/
 └── requirements.txt         # Python dependencies
 ```
 
-## Quick Start
+## Local Setup
 
 ### Prerequisites
 - Python 3.11+
-- AWS Account (free tier)
-- Hugging Face API token ([get here](https://huggingface.co/settings/tokens))
+- AWS Account
+- HuggingFace API token
 - AWS CLI + SAM CLI installed
 
-### Local Development
+### Run Locally
 
-1. **Clone repository**
-```bash
-git clone https://github.com/evanpetersen919/CV-Location-Classifier.git
-cd CV-Location-Classifier
-```
-
-2. **Install dependencies**
+1. **Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Configure environment**
+2. **Configure environment**
 ```bash
 cp .env.example .env
-# Edit .env with your tokens:
+# Edit .env with tokens:
 # - HUGGINGFACE_API_TOKEN
 # - JWT_SECRET
+# - GROQ_API_KEY
 ```
 
-4. **Run API locally**
+3. **Run API**
 ```bash
 cd api
 python main.py
@@ -109,7 +114,7 @@ python main.py
 # Docs: http://localhost:8000/docs
 ```
 
-### AWS Deployment
+### Deploy to AWS
 
 1. **Build Lambda layers**
 ```bash
@@ -122,7 +127,7 @@ sam build --use-container
 sam deploy --guided
 ```
 
-3. **Get your API endpoint**
+3. **Get API endpoint**
 ```bash
 aws cloudformation describe-stacks \
   --stack-name cv-location-classifier \
@@ -130,7 +135,12 @@ aws cloudformation describe-stacks \
   --output text
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment guide.
+## Deployment
+
+- **Frontend**: Vercel (auto-deploy on GitHub push)
+- **Backend**: AWS Lambda + API Gateway (deployed via SAM)
+- **Model**: HuggingFace Spaces (CPU inference)
+- **Database**: DynamoDB + FAISS vector storage
 
 ## Authentication Flow
 
@@ -245,25 +255,31 @@ Backend process:
 
 ## ML Models
 
-### 1. Landmark Detector (EfficientNet-B3)
-- **Dataset**: 500 landmark classes
-- **Accuracy**: ~80% on validation set
+### 1. EfficientNet-B3 (Primary Classifier)
+- **Dataset**: Google Landmarks Dataset v2 (500 classes)
+- **Training**: 20 hours on RTX 4080 (i9-13900K, 64GB DDR5)
+- **Augmentation**: RandAugment, MixUp, CutMix + custom social media overlays
 - **Input**: 300x300 RGB images
 - **Output**: Top-5 predictions with confidence scores
-- **Inference Time**: ~200ms on Lambda CPU
+- **Inference**: HuggingFace Spaces (CPU)
+- **Preprocessing**: Template matching to remove social media UI elements
 
-### 2. Groq Llama 4 Scout (Vision-Language Model)
+### 2. Google Vision API (Validation)
+- **Purpose**: Validates EfficientNet predictions when confidence < 70%
+- **Integration**: Google Cloud Vision API
+- **Usage**: Tier 1 fallback for low-confidence results
+
+### 3. CLIP ViT-B/32 (Visual Similarity)
+- **Database**: 4,248 landmark embeddings
+- **Search Method**: FAISS cosine similarity
+- **Purpose**: Tier 2 fallback when users reject initial predictions
+- **Search Time**: <50ms
+
+### 4. Groq Llama 4 Scout 17B (Scene Understanding)
+- **Provider**: Groq API (ultra-fast inference)
+- **Purpose**: Detailed scene descriptions and context
+- **Activation**: Tier 2 fallback alongside CLIP search
 - **Model**: meta-llama/llama-4-scout-17b-16e-instruct
-- **Provider**: Hugging Face Inference API
-- **Purpose**: Natural language scene descriptions
-- **Rate Limit**: 1 request/second (free tier)
-- **Monthly Limit**: 1,000 requests (free tier)
-
-### 3. CLIP (Visual Similarity)
-- **Architecture**: ViT-B/32
-- **Purpose**: Find visually similar landmarks
-- **Database**: 50K+ landmark embeddings
-- **Search Time**: <50ms (cosine similarity)
 
 ## DynamoDB Schema
 
@@ -295,9 +311,11 @@ GSI2: Username lookup (GSI2_PK=USERNAME#{username})
 
 ### Total Monthly Cost: **$0.00**
 
-## Development
 
-### Run Tests
+
+## Development Commands
+
+### Testing
 ```bash
 pytest tests/ -v
 ```
@@ -318,22 +336,33 @@ sam logs --stack-name cv-location-classifier --tail
 aws dynamodb scan --table-name cv-location-app --max-items 10
 ```
 
-## Technical Implementation
+## Technical Highlights
 
-**Completed:**
-- Landmark detection (EfficientNet-B3, 500 classes)
-- Scene understanding (Llama 4 Scout via Groq API - FREE & fast)
-- Visual similarity search (CLIP embeddings)
-- User authentication (JWT + bcrypt)
+**Training Pipeline:**
+- Custom hardware: i9-13900K, RTX 4080 16GB, 64GB DDR5, Intel 1TB NVMe
+- Mixed precision FP16 training with AdamW optimizer
+- Transfer learning from ImageNet pretrained weights
+- Social media augmentation (Instagram/TikTok overlays at 30% probability)
+- MLflow for experiment tracking and model registry
+
+**Detection System:**
+- Two-tier architecture: Fast classification (Tier 1) + Fallback analysis (Tier 2)
+- Tier 1: EfficientNet-B3 with optional Google Vision validation
+- Tier 2: CLIP similarity search + Groq LLM for rejected predictions
+- Preprocessing removes social media UI using template matching
+
+**Full-Stack Application:**
+- Next.js 16 (React 19) frontend with Tailwind CSS
+- FastAPI backend with JWT authentication
 - DynamoDB single-table design with GSI indexes
-- FastAPI REST API with 12 endpoints
 - AWS Lambda serverless deployment
-- Infrastructure as Code with AWS SAM
-- Comprehensive deployment documentation
+- Vercel auto-deployment for frontend
+- GitHub Actions CI/CD pipeline
+- CloudWatch monitoring for Lambda performance
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file
+All Rights Reserved © 2025 Evan Petersen
 
 ## Author
 
