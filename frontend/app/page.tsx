@@ -73,7 +73,7 @@ export default function Home() {
               <a href="#about" className="text-stone-300 hover:text-orange-400 transition-colors duration-200 font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' }); }}>About</a>
               <button 
                 onClick={handleGetStarted}
-                className="px-6 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold cursor-pointer"
+                className="px-6 py-2 border-2 border-orange-500 text-orange-500 hover:text-white rounded-lg hover:bg-orange-500 hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-200 font-semibold cursor-pointer"
               >
                 Get Started
               </button>
@@ -102,7 +102,7 @@ export default function Home() {
               <a href="#about" className="block text-stone-300 hover:text-orange-400 transition-colors font-medium cursor-pointer" onClick={(e) => { e.preventDefault(); document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }}>About</a>
               <button 
                 onClick={(e) => { handleGetStarted(e); setMobileMenuOpen(false); }}
-                className="block w-full text-center px-6 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg font-semibold cursor-pointer"
+                className="block w-full text-center px-6 py-2 border-2 border-orange-500 text-orange-500 hover:text-white rounded-lg hover:bg-orange-500 font-semibold cursor-pointer"
               >
                 Get Started
               </button>
@@ -137,15 +137,12 @@ export default function Home() {
           </p>
           <button
             onClick={handleGetStarted}
-            className="group relative inline-block overflow-hidden border-2 border-orange-500 text-orange-400 hover:text-white px-12 py-5 rounded-2xl text-lg font-semibold hover:scale-105 hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] transition-all duration-300 mb-16 cursor-pointer"
+            className="group inline-flex items-center gap-2 border-2 border-orange-500 text-orange-400 hover:text-white hover:bg-orange-500 px-12 py-5 rounded-2xl text-lg font-semibold hover:scale-105 hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] transition-all duration-300 mb-16 cursor-pointer"
           >
-            <span className="relative z-10 flex items-center gap-2">
-              Start Planning Now
-              <svg className="w-5 h-5 group-hover:translate-x-2 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </span>
-            <div className="absolute inset-0 bg-gradient-to-r from-orange-500 via-red-600 to-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            Start Planning Now
+            <svg className="w-5 h-5 group-hover:translate-x-2 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
           </button>
           
           {/* Demo Video */}
