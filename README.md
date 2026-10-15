@@ -1,6 +1,10 @@
 # TripSaver - AI-Powered Trip Planner
 ### Full-Stack AI Platform for Global Landmark Recognition
 
+<p align="center">
+  <img src="frontend/public/videos/demo.gif" alt="TripSaver demo" width="800">
+</p>
+
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com/)
